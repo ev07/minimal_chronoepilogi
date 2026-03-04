@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "chronoepilogi"
+version = "0.0.1"
+description = "Scalable Time Series Selection with Multiple Solutions"
+keywords = ["feature selection", "time series selection", "multivariate time series", "MTS", "MTS forecasting", "Markov Boundaries"]
+license = {text = "Apache-2.0"}
+license-files = ["LICENSE*", "NOTICE"]
+readme = {"file" = "README.md", "content-type" = "text/markdown"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering"
+]
+
+
+authors = [
+    {name="Etienne Vareille",email="etienne.vareille@ensea.fr"}
+]
+maintainers = []
+
+
+requires-python = ">=3.8"
+dependencies = [
+    "pingouin",
+    "tigramite",
+    "statsmodels",
+    "scipy",
+    "numpy",
+    "pandas",
+    "joblib",
+    "deepdiff",
+    "pydash",
+    "scikit-learn",
+    "bottleneck"
+]
+# add dependencies version later https://hatch.pypa.io/latest/config/dependency/
+# using the "compatible release" operator might solve it simply
+
+[project.optional-dependencies]
+pdm = []
+
+
+[project.urls]
+Documentation = "..."
+"Source code" = "..."
+
+
+[tool]

@@ -1,0 +1,35 @@
+site_name: ChronoEpilogi Documentation
+docs_dir: .\\docs
+theme:
+  name: material
+  features:
+    - content.tabs.link    # Optional: keep useful features
+    - navigation.sections  # Optional
+    - navigation.expand    # Optional
+nav:
+  - Home: index.md
+  - User Guide:
+    - Overview: user-guide\\overview.md
+    - Data and tasks: user-guide\\data_and_tasks.md 
+  - API:
+    - ChronoEpilogi: api\\chronoepilogi.md
+    - Forecasting models: api\\forecasting_models.md
+    - Association: api\\association.md
+    - Partial Correlation: api\\partial_correlation.md
+plugins:
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_signature_annotations: true
+            docstring_style: numpy
+            show_bases: true
+
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
