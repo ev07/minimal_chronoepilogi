@@ -357,6 +357,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-step-ahead-prediction-on-mts-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-step-ahead prediction on MTS data
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -605,6 +622,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-step-ahead-prediction-on-mts-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-step-ahead prediction on MTS data
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -649,18 +683,27 @@ ChronoEpilogi does not handle unsupervised tasks, as it requires target knowledg
 <p>For the same reason of requiring a single number to completely represent the error made by the model, we only handle single horizon forecasting. Predicting several quantities would requires several error terms, which is beyond the current implementation.</p>
 <h2 id="data-format">Data format</h2>
 <p>Data is provided to the algorithm in the form of a pandas DataFrame. </p>
-<p>For Time Series Selection, we use 1-level column indexes:
- - For MTS data with one-step-ahead predictions, each row must correspond to a timestamp, and timestamps must be ordered at a regular frequency without missing timestamps. Each column of the DataFrame represents a TS. If the task is autoregressive, set ChronoEpilogi kwarg <code>start_with_univariate_autoregressive_model</code> to True, otherwise set it to False.
- - For MTS data where the prediction's past is unobserved, the one-step-ahead prediction framework can be used, by setting the prediction <span class="arithmatex">\(y\)</span> corresponding to an observed window <span class="arithmatex">\(X_{t-L:t-1}\)</span> at timestamp <span class="arithmatex">\(t\)</span>. Set ChronoEpilogi kwarg  <code>start_with_univariate_autoregressive_model</code> to False to avoid using previous predictions as part of the input.
- - For MTS data with a prediction several timesteps ahead, create a new column in the DataFrame recording the prediction at time <span class="arithmatex">\(t\)</span>, and set <code>start_with_univariate_autoregressive_model</code> to False.</p>
-<p>For (Group) Feature Selection, we use 2-levels column indexes:
- - Each row of the dataframe must correspond to one observation. If the input data is originally 2D, it must be flattened.
- - The predicted target must be on the same row as the corresponding observation.
- - For Group Feature Selection, the columns should be indexed by a pandas MultiIndex class with two levels. The first level correspond to a group name, the second level corresponds to the name of the feature/attribute.
- - For Feature Selection, set group names identically to feature/attributes, ensuring a single attribute per group.
- - Set <code>start_with_univariate_autoregressive_model</code> to False.</p>
+<p>For Time Series Selection, we use 1-level column indexes:</p>
+<ul>
+<li>For MTS data with one-step-ahead predictions, each row must correspond to a timestamp, and timestamps must be ordered at a regular frequency without missing timestamps. Each column of the DataFrame represents a TS. If the task is autoregressive, set ChronoEpilogi kwarg <code>start_with_univariate_autoregressive_model</code> to True, otherwise set it to False.</li>
+<li>For MTS data where the prediction's past is unobserved, the one-step-ahead prediction framework can be used, by setting the prediction <span class="arithmatex">\(y\)</span> corresponding to an observed window <span class="arithmatex">\(X_{t-L:t-1}\)</span> at timestamp <span class="arithmatex">\(t\)</span>. Set ChronoEpilogi kwarg  <code>start_with_univariate_autoregressive_model</code> to False to avoid using previous predictions as part of the input.</li>
+<li>For MTS data with a prediction several timesteps ahead, create a new column in the DataFrame recording the prediction at time <span class="arithmatex">\(t\)</span>, and set <code>start_with_univariate_autoregressive_model</code> to False.</li>
+</ul>
+<p>For (Group) Feature Selection, we use 2-levels column indexes:</p>
+<ul>
+<li>Each row of the dataframe must correspond to one observation. If the input data is originally 2D, it must be flattened.</li>
+<li>The predicted target must be on the same row as the corresponding observation.</li>
+<li>For Group Feature Selection, the columns should be indexed by a pandas MultiIndex class with two levels. The first level correspond to a group name, the second level corresponds to the name of the feature/attribute.</li>
+<li>For Feature Selection, set group names identically to feature/attributes, ensuring a single attribute per group.</li>
+<li>Set <code>start_with_univariate_autoregressive_model</code> to False.</li>
+</ul>
 <p>The algorithm does not handle missing values. All columns and levels must be named with strings.</p>
 <h2 id="examples">Examples</h2>
+<p>The UCI machine learning repository provides datasets that suit a variety of tasks. We will use several of the availabel datasets to illustrate the above scenarios.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chronoepilogi</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChronoEpilogi</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ucimlrepo</span><span class="w"> </span><span class="kn">import</span> <span class="n">fetch_ucirepo</span>
+</span></code></pre></div>
+<h3 id="one-step-ahead-prediction-on-mts-data">One-step-ahead prediction on MTS data</h3>
 
 
 
@@ -712,7 +755,7 @@ ChronoEpilogi does not handle unsupervised tasks, as it requires target knowledg
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.tabs.link", "navigation.sections", "navigation.expand"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.tabs.link", "navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
