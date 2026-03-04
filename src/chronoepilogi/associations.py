@@ -9,7 +9,7 @@ from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
 
-from util_mass_ts import mass2_modified
+from chronoepilogi.util_mass_ts import mass2_modified
 
 ##
 #
@@ -247,6 +247,8 @@ class CrossSectionalAssociation(Association):
         >>> asso =  CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
         >>> asso
         """
+        super().__init__(config)
+
     def association(self,residuals_df:pd.DataFrame, variables_df:pd.DataFrame)->np.array:
         """
         Computes the association score between the residuals and candidate time series.
@@ -272,7 +274,7 @@ class CrossSectionalAssociation(Association):
         Examples
         --------
         >>> rng = np.random.default_rng(0)
-        >>> data = pd.DataFrame(np.random.random(size=(1000,5)),columns=pd.MultiIndex.from_tuples([("target",""),("G1","a"),("G1","b"),("G2","a"),("G2","b")]))
+        >>> data = pd.DataFrame(rng.random(size=(1000,5)),columns=pd.MultiIndex.from_tuples([("target",""),("G1","a"),("G1","b"),("G2","a"),("G2","b")]))
         >>> variable_types = dict([(column, "numerical") for column in data.columns.get_level_values(0).unique()])
         >>> asso = CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
         >>> asso.association(data[["target"]], data[["G1","G2"]])
@@ -1145,7 +1147,7 @@ class CrossSectionalHk(PartialCorrelation):
             A 2D numpy array of shape (k,k). It contains the p-values of the tests (R indep Ca_i | Co_j),
             with R the residuals, Ca the candidate group, Co the condition group.
             The first dimension correspond to a retained feature of Ca, the second dimension to a feature of Co.
-        p_RCa_Co: np.array
+        p_RCo_Ca: np.array
             A 2D numpy array of shape (k,k). It contains the p-values of the tests (R indep Co_j | Ca_i).
             The first dimension correspond to a retained feature of Co, the second dimension to a feature of Ca.
         p_RCa: np.array
@@ -1205,8 +1207,8 @@ class CrossSectionalHk(PartialCorrelation):
                 for j, Co_max_index in enumerate(Co_max_indexes):
                     d = pd.concat([residuals_df,candidate_df[nameCa].iloc[:,Ca_max_index],condition_df[nameCo].iloc[:,Co_max_index]],axis=1)
                     d.columns = ["res","cand","cond"]
-                    p_RCa_Co[i,j] = pingouin.partial_corr(data=d, x="res", y="cand", covar="cond")["p-val"].values[0]
-                    p_RCo_Ca[j,i] = pingouin.partial_corr(data=d, x="res", y="cond", covar="cand")["p-val"].values[0]
+                    p_RCa_Co[i,j] = pingouin.partial_corr(data=d, x="res", y="cand", covar="cond")["p_val"].values[0]
+                    p_RCo_Ca[j,i] = pingouin.partial_corr(data=d, x="res", y="cond", covar="cand")["p_val"].values[0]
 
 
         #categorical-numerical and categorical-categorical
@@ -1307,7 +1309,7 @@ class TemporalSlowHk(PartialCorrelation):
             A 2D numpy array of shape (k,k). It contains the p-values of the tests (R indep Ca_i | Co_j),
             with R the residuals, Ca the candidate TS, Co the condition TS.
             The first dimension correspond to a retained lag of Ca, the second dimension to a lag of Co.
-        p_RCa_Co: np.array
+        p_RCo_Ca: np.array
             A 2D numpy array of shape (k,k). It contains the p-values of the tests (R indep Co_j | Ca_i).
             The first dimension correspond to a retained lag of Co, the second dimension to a lag of Ca.
         p_RCa: np.array

@@ -7,7 +7,7 @@ For an in-depth description of the algorithm, we refer to our paper [1].
 
 ChronoEpilogi is a Time Series Selection (TSS) algorithm : given a Multivariate Time Series (MTS), it selects appropriate dimensions to forecast a quantity of interest. 
 
-For instance, we have a MTS $X$ of size $T\times D$, with $T$ timestamps and $D$ Time Series recorded. We are interested in forecasting one of the dimensions that we will call the target TS $X^1$, considering a lookback windows of $L$ lags at horizon 1. Formally, we want to learn a model $f$ to approximate $\mathbb{E}[X^1_t | X^{1:D}_{t-L...t-1}]$. This problem is called *one step ahead point forecasting*. ChronoEpilogi extends to other similar tasks, see [data and tasks](\\user-guide\\data_and_tasks).
+For instance, we have a MTS $X$ of size $T\times D$, with $T$ timestamps and $D$ Time Series recorded. We are interested in forecasting one of the dimensions that we will call the target TS $X^1$, considering a lookback windows of $L$ lags at horizon 1. Formally, we want to learn a model $f$ to approximate $\mathbb{E}[X^1_t | X^{1:D}_{t-L...t-1}]$. This problem is called *one step ahead point forecasting*. ChronoEpilogi extends to other similar tasks, see [data and tasks](..\\..\\user-guide\\data_and_tasks).
 
 Generally, using $X^{1:D}_{t-L...t-1}$ is unadvisable when $D$ is large: models trained on high dimensional data are less efficient and more likely to overfit. Only a portion of the MTS $D$ dimensions might be useful for the forecasting task, and finding minimal, optimally predictive sets of TS is ChronoEpilogi's function. We distinguish Single TSS and Multiple TSS tasks. 
 
@@ -21,7 +21,7 @@ Single TSS is useful to set of TS optimally suited for forecasting. Multiple TSS
 
 ## ChronoEpilogi phases: single and multiple Time Series Selection
 
-We provide utilities to solve both problems, through the keyword argument `phases` of the [ChronoEpilogi class](\\api\\chronoepilogi). The phases are consecutive: we first obtain a single solution (hence solve the Single TSS problem) then build equivalent solutions (TSS multiple).
+We provide utilities to solve both problems, through the keyword argument `phases` of the [ChronoEpilogi class](..\\..\\api\\chronoepilogi). The phases are consecutive: we first obtain a single solution (hence solve the Single TSS problem) then build equivalent solutions (TSS multiple).
 
 The single TSS variant of ChronoEpilogi can be accessed with `ChronoEpilogi(phases="FB")`. It includes a *Forward* phase and a *Backward* phase. The forward phase iteratively builds a maximally predictive set of TS starting from an empty set. The backward phase eliminates potentially redundant TS from this set afterwards, ensuring that the returned set `ChronoEpilogi.get_first_markov_boundary()` is both minimal and maximally predictive.
 
@@ -42,7 +42,7 @@ ChronoEpilogi relies on predictive models to assess whether a TS is beneficial t
 
 By default, ChronoEpilogi uses a linear model suited to the data at hand: a simple linear model for continuous targets, a Poisson GLM for count TS and a Logit GLM for binary TS.
 
-In case that the provided models prove unsuitable for the data at hand, the [LearningModel class](\\api\\forecasting_models) is a wrapper that specifies what ChronoEpilogi main class expects from a learning model. Subclassing `LearningModel` requires filling the `__init__`, `fit` (model training/fitting), `fittedvalues` (returning predictions) and `stopping_metric` (testing for model equivalence) methods.
+In case that the provided models prove unsuitable for the data at hand, the [LearningModel class](..\\..\\api\\forecasting_models) is a wrapper that specifies what ChronoEpilogi main class expects from a learning model. Subclassing `LearningModel` requires filling the `__init__`, `fit` (model training/fitting), `fittedvalues` (returning predictions) and `stopping_metric` (testing for model equivalence) methods.
 
 ### Associations
 

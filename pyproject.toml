@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "chronoepilogi"
 version = "0.0.1"
 description = "Scalable Time Series Selection with Multiple Solutions"
-keywords = ["feature selection", "time series selection", "multivariate time series", "MTS", "MTS forecasting", "Markov Boundaries"]
+keywords = ["feature selection", "time series selection", "multivariate time series", "MTS", "MTS forecasting", "Markov Boundary", "multiple Markov Boundaries"]
 license = {text = "Apache-2.0"}
 license-files = ["LICENSE*", "NOTICE"]
 readme = {"file" = "README.md", "content-type" = "text/markdown"}
@@ -48,8 +48,8 @@ pdm = []
 
 
 [project.urls]
-Documentation = "..."
-"Source code" = "..."
+Documentation = "https://ev07.github.io/minimal_chronoepilogi/"
+"Source code" = "https://github.com/ev07/minimal_chronoepilogi/tree/main"
 
 
 [tool]

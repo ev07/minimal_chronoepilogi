@@ -4,14 +4,14 @@ import deepdiff.diff
 from collections import defaultdict
 from typing import List
 
-from associations import ModelBasedPartialCorrelation,H2PartialCorrelation,H3PartialCorrelation, HkPartialCorrelation, CrossSectionalH0
+from chronoepilogi.associations import ModelBasedPartialCorrelation, CrossSectionalH0
 
 
-from associations import TemporalSlowAssociation, CrossSectionalAssociation, Association
-from associations import TemporalSlowHk, CrossSectionalHk, PartialCorrelation
+from chronoepilogi.associations import TemporalSlowAssociation, CrossSectionalAssociation, Association
+from chronoepilogi.associations import TemporalSlowHk, CrossSectionalHk, PartialCorrelation
 
-from models import ARDLModel, TemporalAdaptation, LearningModel
-from models import OLSCrossSectional, PoissonCrossSectional, LogitCrossSectional
+from chronoepilogi.models import ARDLModel, TemporalAdaptation, LearningModel
+from chronoepilogi.models import OLSCrossSectional, PoissonCrossSectional, LogitCrossSectional
 
 class ChronoEpilogi():
 
