@@ -1,0 +1,6 @@
+/site/
+/.venv/
+/.venv_wheel/
+/.pytest_cache/
+/dist/
+__pycache__/
