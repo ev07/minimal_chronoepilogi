@@ -24,7 +24,13 @@ ChronoEpilogi provides interpretability by design. By identifying multiple Marko
 
 ## Installation
 
+You can install ChronoEpilogi with pip. We recommend using a virtual environment.
+
+`pip install git+https://github.com/ev07/minimal_chronoepilogi.git`
+
 ## Quick Start
+
+
 
 ## Credits
 

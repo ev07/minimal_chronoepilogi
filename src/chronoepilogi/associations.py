@@ -76,8 +76,18 @@ class PearsonMultivariate(Association):
     
         residuals, variables = self._select_correct_rows(residuals_df, variables_df)
 
+        # constant residuals? Everything is uncorrelated
+        if len(np.unique(residuals))==1:
+            if self.config["return_type"] == "p-value":
+                return np.ones(variables.shape[1])
+            else:
+                return np.zeros(variables.shape[1])
+
         if self.config["lags"] == 1:  # edge case of the fft
-            coefficients = [[pearsonr(residuals,variables[:-1,i]).correlation] for i in range(variables.shape[1])]
+            # constant variables get correlation 0
+            coefficients = [[pearsonr(residuals,variables[:-1,i]).correlation]\
+                            if not len(np.unique(variables[:-1,i]))==1 else [0]\
+                            for i in range(variables.shape[1])]
             coefficients = np.array(coefficients)
         else:
             # mass2 is the computation bottleneck due to fft.
@@ -976,8 +986,14 @@ class HkPartialCorrelation(HeuristicPartialCorrelation):
             
                 CoCa = pearsonr(cand[Ca_max_index:-self.config["lags"]+Ca_max_index][:,0],cond[Co_max_index:-self.config["lags"]+Co_max_index][:,0])[0]
                 
-                RCa_Co[i,j] = (RCa[Ca_max_index] - RCo[Co_max_index]*CoCa) / np.sqrt( (1 - CoCa**2)*(1 - RCo[Co_max_index]**2) ) 
-                RCo_Ca[j,i] = (RCo[Co_max_index] - RCa[Ca_max_index]*CoCa) / np.sqrt( (1 - CoCa**2)*(1 - RCa[Ca_max_index]**2) ) 
+                # if any division by 0 occur, this means that the condition is identical to either residuals or candidate.
+                # so partial correlation is set to 0.
+                a = RCa[Ca_max_index] - RCo[Co_max_index]*CoCa 
+                b = np.sqrt( (1 - CoCa**2)*(1 - RCo[Co_max_index]**2) )
+                RCa_Co[i,j] = np.divide(a,b,where=b!=0,out=np.zeros_like(a))
+                a = RCo[Co_max_index] - RCa[Ca_max_index]*CoCa
+                b = np.sqrt( (1 - CoCa**2)*(1 - RCa[Ca_max_index]**2) ) 
+                RCo_Ca[j,i] = np.divide(a,b,where=b!=0,out=np.zeros_like(a)) 
         
         
         # compute pvalue of the two correlation tables

@@ -267,7 +267,7 @@ class ARDLModel(LearningModel):
         self.results = None  # to store the ARDLResults instance
 
     def fit(self, data):
-        """Make sure that number of parameters are enough compared to the data size
+        """
         """
         if isinstance(self.config["constructor"]["order"], int) or isinstance(self.config["constructor"]["order"], float):
             maxlag = self.config["constructor"]["order"]
@@ -275,8 +275,9 @@ class ARDLModel(LearningModel):
             maxlag = max(self.config["constructor"]["order"])
         maxlag = max([maxlag, self.config["constructor"]["lags"]])
         if len(data.index) - maxlag < maxlag*len(data.columns)+4:
-            raise NotEnoughDataError(len(data.index), self.config["constructor"]["lags"], self.config["constructor"]["order"])
-    
+            #Make sure that number of parameters are enough compared to the data size
+            raise NotEnoughDataError(len(data.index),len(data.columns), self.config["constructor"]["lags"], self.config["constructor"]["order"])
+        
         self.data = data
         self.model = self.createModel(data)
         self.results = self.model.fit(**self.config["fit"])
@@ -444,7 +445,7 @@ class LogitCrossSectional(LearningModel):
         exog = data[columns]
         exog = self._MultiIndex_to_flat(exog)
         exog = self._remove_constant_columns(exog)
-        exog["intercept"] = 1  # add intercept, as the model is not doing it itself
+        exog["intercept"] = 1
         return exog
 
     def fit(self, data):
@@ -454,8 +455,10 @@ class LogitCrossSectional(LearningModel):
         self.model = statsmodels.discrete.discrete_model.Logit(endog,exog,**self.config["constructor"])
         if "fit" in self.config:
             self.results = self.model.fit(**self.config["fit"])
-        else:
+        elif "fit_regularized" in self.config:
             self.results = self.model.fit_regularized(**self.config["fit_regularized"])
+        else:
+            raise ValueError("fit or fit_regularized must be in config")
 
     def fittedvalues(self, data=None):
         # return the fitted values of the model.

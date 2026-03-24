@@ -11,7 +11,7 @@ nav:
   - Home: index.md
   - User Guide:
     - Overview: user-guide\\overview.md
-    - Data and tasks: user-guide\\data_and_tasks.md 
+    - Data and tasks: user-guide\\data_and_tasks.md
   - API:
     - ChronoEpilogi: api\\chronoepilogi.md
     - Forecasting models: api\\forecasting_models.md

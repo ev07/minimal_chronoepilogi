@@ -272,7 +272,8 @@ def mass2_modified(ts, query):
     z = np.fft.ifft(z,axis=-1)
 
     # 'where' to handle nans from std=0
-    # in this case, we want the correlation to be 0. So instead of nan, we put m.
+    # in this case (constant array), we want the correlation to be 0. So the distance must be 2m.
+    # So instead of nan, we put 0 as output of the division.
     a = (z[:,m - 1:n] - m * meanx[:,m - 1:n] * meany)
     b = (sigmax[:,m - 1:n] * sigmay)
     dist = 2 * (m - np.divide(a,b,where=(b!=0),out=np.zeros_like(a)))

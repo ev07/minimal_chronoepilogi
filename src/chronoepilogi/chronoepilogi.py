@@ -18,7 +18,7 @@ class ChronoEpilogi():
     def __init__(self, 
                  # main parameters
                  data: pd.DataFrame,
-                 target: str,
+                 target: str|tuple[str,str],
                  phases:str="FB",
                  equivalence_early_stopping:bool = True,
                  # other important parameters
