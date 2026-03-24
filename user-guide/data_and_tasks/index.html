@@ -371,6 +371,50 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#one-step-ahead-prediction-on-mts-data-without-including-the-past-of-the-forecasted-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-step-ahead prediction on MTS data without including the past of the forecasted series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#five-steps-ahead-prediction-on-mts-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Five-steps-ahead prediction on MTS data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#feature-selection-atemporal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Selection (atemporal)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#group-feature-selection-atemporal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Group Feature selection (atemporal)
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -636,6 +680,50 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#one-step-ahead-prediction-on-mts-data-without-including-the-past-of-the-forecasted-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-step-ahead prediction on MTS data without including the past of the forecasted series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#five-steps-ahead-prediction-on-mts-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Five-steps-ahead prediction on MTS data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#feature-selection-atemporal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Selection (atemporal)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#group-feature-selection-atemporal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Group Feature selection (atemporal)
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -695,15 +783,103 @@ ChronoEpilogi does not handle unsupervised tasks, as it requires target knowledg
 <li>The predicted target must be on the same row as the corresponding observation.</li>
 <li>For Group Feature Selection, the columns should be indexed by a pandas MultiIndex class with two levels. The first level correspond to a group name, the second level corresponds to the name of the feature/attribute.</li>
 <li>For Feature Selection, set group names identically to feature/attributes, ensuring a single attribute per group.</li>
-<li>Set <code>start_with_univariate_autoregressive_model</code> to False.</li>
+<li>Set <code>start_with_univariate_autoregressive_model</code> to <code>False</code> or <code>"infer"</code>.</li>
 </ul>
 <p>The algorithm does not handle missing values. All columns and levels must be named with strings.</p>
 <h2 id="examples">Examples</h2>
-<p>The UCI machine learning repository provides datasets that suit a variety of tasks. We will use several of the availabel datasets to illustrate the above scenarios.</p>
+<p>The UCI machine learning repository provides datasets that suit a variety of tasks. We will use the Appliance Energy Prediction dataset to illustrate the above scenarios.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chronoepilogi</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChronoEpilogi</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ucimlrepo</span><span class="w"> </span><span class="kn">import</span> <span class="n">fetch_ucirepo</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># fetch dataset </span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">appliances_energy_prediction</span> <span class="o">=</span> <span class="n">fetch_ucirepo</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">374</span><span class="p">)</span> 
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># data (as pandas dataframes) </span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">X</span> <span class="o">=</span> <span class="n">appliances_energy_prediction</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">features</span> 
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">y</span> <span class="o">=</span> <span class="n">appliances_energy_prediction</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">targets</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># merge</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">X</span><span class="p">,</span><span class="n">y</span><span class="p">,</span><span class="n">left_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">right_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># remove date</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">1</span><span class="p">:]]</span>
 </span></code></pre></div>
+<p>The Appliances Energy Prediction dataset (<a href="https://doi.org/10.1016/j.enbuild.2017.01.083">Paper</a>) is a regression dataset for energy consumption prediction in a home. It has 28 TS and 19735 observations, and all TS record numerical quantities. Predictors include Temperature and Humidity records in several rooms, light fixture energy consumption, and outside meteorological indicators of temperature, humidity, pressure, wind speed, visibility and dewpoint.</p>
+<p>The dataset was originally used in a non-temporal context, where the relation of TS was only examined contemporaneously. The authors wanted to identify models and predictors to solve the task of modeling Applicances at time <span class="arithmatex">\(t\)</span> given the other TS at time <span class="arithmatex">\(t\)</span>. We will show other ways of setting the problem. For convenience, we note Appliances at time <span class="arithmatex">\(t\)</span> by <span class="arithmatex">\(X^1_t\)</span> and other TS at time <span class="arithmatex">\(t\)</span> by <span class="arithmatex">\(X^j_t\)</span>, and denote their past by <span class="arithmatex">\(X^j_{t-L:t-1}\)</span>.</p>
 <h3 id="one-step-ahead-prediction-on-mts-data">One-step-ahead prediction on MTS data</h3>
+<p>ChronoEpilogi with default parameters allow us to model Appliances at time <span class="arithmatex">\(t\)</span> in function of the past <span class="arithmatex">\(L=10\)</span> observations (100 minutes).
+Formally, we model <span class="arithmatex">\(X^1_t = f(X^{\boldsymbol{S}}_{t-L:t-1})\)</span> with <span class="arithmatex">\(\boldsymbol{S}\)</span> a subset of the available TS, including Applicances past <span class="arithmatex">\(X^1_{t-L:t-1}\)</span>.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">variable_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span><span class="s2">&quot;numerical&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">}</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">target_type</span> <span class="o">=</span> <span class="s2">&quot;continuous&quot;</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">target</span> <span class="o">=</span> <span class="s2">&quot;Appliances&quot;</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">default_max_lags</span> <span class="o">=</span> <span class="mi">10</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">fs_instance</span> <span class="o">=</span> <span class="n">ChronoEpilogi</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">target_type</span><span class="o">=</span><span class="n">target_type</span><span class="p">,</span> <span class="n">default_max_lag</span><span class="o">=</span><span class="n">default_max_lags</span><span class="p">,</span> <span class="n">variable_types</span><span class="o">=</span><span class="n">variable_types</span><span class="p">)</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">get_first_markov_boundary</span><span class="p">()</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>[&#39;Appliances&#39;, &#39;lights&#39;, &#39;RH_5&#39;, &#39;T6&#39;, &#39;T1&#39;, &#39;RH_1&#39;, &#39;RH_9&#39;, &#39;Press_mm_hg&#39;]
+</span></code></pre></div>
+<h3 id="one-step-ahead-prediction-on-mts-data-without-including-the-past-of-the-forecasted-series">One-step-ahead prediction on MTS data without including the past of the forecasted series</h3>
+<p>We might not have the energy consumption of the applicances available at prediction time. Hence, we exclude the past of Appliances.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">variable_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span><span class="s2">&quot;numerical&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">}</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">target_type</span> <span class="o">=</span> <span class="s2">&quot;continuous&quot;</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">target</span> <span class="o">=</span> <span class="s2">&quot;Appliances&quot;</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">default_max_lags</span> <span class="o">=</span> <span class="mi">10</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">fs_instance</span> <span class="o">=</span> <span class="n">ChronoEpilogi</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">target_type</span><span class="o">=</span><span class="n">target_type</span><span class="p">,</span> <span class="n">default_max_lag</span><span class="o">=</span><span class="n">default_max_lags</span><span class="p">,</span> <span class="n">variable_types</span><span class="o">=</span><span class="n">variable_types</span><span class="p">,</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="hll">                            <span class="n">start_with_univariate_autoregressive_model</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span></span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">get_first_markov_boundary</span><span class="p">()</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>[&#39;lights&#39;,&#39;RH_out&#39;,&#39;RH_1&#39;,&#39;RH_8&#39;,&#39;T4&#39;,&#39;T3&#39;,&#39;RH_2&#39;,&#39;T2&#39;,&#39;Windspeed&#39;,&#39;T8&#39;,&#39;Visibility&#39;,&#39;RH_9&#39;,&#39;RH_5&#39;,&#39;T9&#39;]
+</span></code></pre></div>
+<h3 id="five-steps-ahead-prediction-on-mts-data">Five-steps-ahead prediction on MTS data</h3>
+<p>To go from one-step-ahead to another horizon, we shift the forecasted series backwards. For the past of the forecasted quantity to be included in the model, we create another time series "Applicances_past" that will serve as predictor, and exclude the past of the target series "Appliances".</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="hll"><span class="n">data2</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+</span></span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="hll"><span class="n">data2</span> <span class="o">=</span> <span class="n">data2</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Appliances&quot;</span><span class="p">:</span><span class="s2">&quot;Appliances_past&quot;</span><span class="p">})</span>
+</span></span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="hll"><span class="n">data2</span><span class="p">[</span><span class="s2">&quot;Appliances&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data2</span><span class="p">[</span><span class="s2">&quot;Appliances_past&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="o">-</span><span class="mi">4</span><span class="p">)</span>  <span class="c1"># Put time t+4 at time t</span>
+</span></span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="hll"><span class="n">data2</span> <span class="o">=</span> <span class="n">data2</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+</span></span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">variable_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span><span class="s2">&quot;numerical&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data2</span><span class="o">.</span><span class="n">columns</span><span class="p">}</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">target_type</span> <span class="o">=</span> <span class="s2">&quot;continuous&quot;</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">target</span> <span class="o">=</span> <span class="s2">&quot;Appliances&quot;</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">default_max_lags</span> <span class="o">=</span> <span class="mi">10</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="n">fs_instance</span> <span class="o">=</span> <span class="n">ChronoEpilogi</span><span class="p">(</span><span class="n">data2</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">target_type</span><span class="o">=</span><span class="n">target_type</span><span class="p">,</span> <span class="n">default_max_lag</span><span class="o">=</span><span class="n">default_max_lags</span><span class="p">,</span> <span class="n">variable_types</span><span class="o">=</span><span class="n">variable_types</span><span class="p">,</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>                            <span class="n">start_with_univariate_autoregressive_model</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">get_first_markov_boundary</span><span class="p">()</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>[&#39;Appliances_past&#39;,&#39;RH_5&#39;,&#39;RH_9&#39;,&#39;RH_2&#39;,&#39;lights&#39;,&#39;T1&#39;,&#39;T6&#39;,&#39;Press_mm_hg&#39;,&#39;T8&#39;,&#39;RH_3&#39;,&#39;RH_out&#39;]
+</span></code></pre></div>
+<h3 id="feature-selection-atemporal">Feature Selection (atemporal)</h3>
+<p>We can use ChronoEpilogi to operate Feature Selection corresponding to the dataset original paper task.
+Formally, we model <span class="arithmatex">\(X^1_t = f(X^{\boldsymbol{S}}_{t})\)</span> with <span class="arithmatex">\(\boldsymbol{S}\)</span> a subset of the available TS, including Applicances past <span class="arithmatex">\(X^1\)</span>.
+To do so, we use a MultiIndex column to indicate non-temporal data to the algorithm. As a result, <code>"variable_types"</code> become group types corresponding to the first level of the column index. Target become the name of the predicted quantity at both levels.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">data3</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="hll"><span class="n">data3</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">MultiIndex</span><span class="o">.</span><span class="n">from_tuples</span><span class="p">([(</span><span class="n">c</span><span class="p">,</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data3</span><span class="o">.</span><span class="n">columns</span><span class="p">])</span>
+</span></span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="hll"><span class="n">variable_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="s2">&quot;numerical&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data3</span><span class="o">.</span><span class="n">columns</span><span class="p">}</span>  <span class="c1"># Group Type</span>
+</span></span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">target_type</span> <span class="o">=</span> <span class="s2">&quot;continuous&quot;</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="hll"><span class="n">target</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;Appliances&quot;</span><span class="p">,</span><span class="s2">&quot;Appliances&quot;</span><span class="p">)</span>
+</span></span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="n">fs_instance</span> <span class="o">=</span> <span class="n">ChronoEpilogi</span><span class="p">(</span><span class="n">data3</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">target_type</span><span class="o">=</span><span class="n">target_type</span><span class="p">,</span> <span class="n">variable_types</span><span class="o">=</span><span class="n">variable_types</span><span class="p">)</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">get_first_markov_boundary</span><span class="p">()</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>[&#39;lights&#39;,&#39;RH_out&#39;,&#39;RH_1&#39;,&#39;RH_8&#39;,&#39;T9&#39;,&#39;T3&#39;,&#39;RH_2&#39;,&#39;Windspeed&#39;,&#39;T2&#39;,&#39;T8&#39;,&#39;T6&#39;,&#39;Visibility&#39;,&#39;RH_3&#39;,&#39;RH_7&#39;,&#39;RH_5&#39;,&#39;T4&#39;,&#39;T_out&#39;,&#39;RH_6&#39;]
+</span></code></pre></div>
+<h3 id="group-feature-selection-atemporal">Group Feature selection (atemporal)</h3>
+<p>The previous example specified that each feature was alone in its group, corresponding to the typical Feature Selection setting. We can do Group Feature Selection by specifying a group in the first level of the column index. In the following example, Temperature and Humidity corresponding to a same room in the house were grouped together.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">data4</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="hll"><span class="n">group</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">c</span><span class="p">:</span> <span class="s2">&quot;out&quot;</span> <span class="k">if</span> <span class="n">c</span><span class="o">==</span><span class="s2">&quot;T_out&quot;</span> <span class="ow">or</span> <span class="n">c</span><span class="o">==</span><span class="s2">&quot;RH_out&quot;</span> <span class="k">else</span> <span class="p">(</span><span class="n">c</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="o">==</span><span class="mi">2</span> <span class="ow">or</span> <span class="n">c</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span><span class="o">==</span><span class="s2">&quot;RH_&quot;</span> <span class="k">else</span> <span class="n">c</span><span class="p">)</span>
+</span></span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="hll"><span class="n">data4</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">MultiIndex</span><span class="o">.</span><span class="n">from_tuples</span><span class="p">([(</span><span class="n">group</span><span class="p">(</span><span class="n">c</span><span class="p">),</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data4</span><span class="o">.</span><span class="n">columns</span><span class="p">])</span>
+</span></span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">variable_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="s2">&quot;numerical&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data4</span><span class="o">.</span><span class="n">columns</span><span class="p">}</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="n">target_type</span> <span class="o">=</span> <span class="s2">&quot;continuous&quot;</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="n">target</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;Appliances&quot;</span><span class="p">,</span><span class="s2">&quot;Appliances&quot;</span><span class="p">)</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">fs_instance</span> <span class="o">=</span> <span class="n">ChronoEpilogi</span><span class="p">(</span><span class="n">data4</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">target_type</span><span class="o">=</span><span class="n">target_type</span><span class="p">,</span> <span class="n">variable_types</span><span class="o">=</span><span class="n">variable_types</span><span class="p">)</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">get_first_markov_boundary</span><span class="p">()</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>[&#39;lights&#39;, &#39;out&#39;, &#39;1&#39;, &#39;8&#39;, &#39;2&#39;, &#39;3&#39;, &#39;Windspeed&#39;, &#39;9&#39;, &#39;Visibility&#39;, &#39;6&#39;]
+</span></code></pre></div>
 
 
 
