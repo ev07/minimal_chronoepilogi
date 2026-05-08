@@ -4,7 +4,7 @@ from statsmodels.regression.linear_model import OLS
 import pingouin
 import tigramite.independence_tests.regressionCI
 
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, cpu_count
 
 import numpy as np
 import pandas as pd
@@ -23,7 +23,7 @@ class Association:
         self.pvalues = dict()
 
     def association(self, residuals_df, variable_df):
-        pass
+        raise NotImplementedError()
 
 
 
@@ -31,185 +31,403 @@ class Association:
 
 class PearsonMultivariate(Association):
     """
-    Computes for each lag up to <lags> of the given variables, its <return_type> with the residuals.
-    The result is then aggregated into a single score using <selection_rule>.
+    Pearson Correlation for numerical data.
 
-        Prefered use case:
-         - many lags have to be computed
+    Notes
+    -----
+    The dataframe that contains the residuals must have only one column.
+    The dataframe that contains the variables must have no missing data (nans) nor missing timestamps.
+    The dataframe that contains the residuals can only have nan values before the first non-nan values, not after.
+    The dataframe that contains the variables must begin at or before the first non-nan value of the residuals.
+    The dataframe that contains the variables must end at or before the residuals end.
+    The lags parameter of the configuration must be less than the length of the variables index.
 
-        Data assumption:
-         - dataframe is sorted by timestamp increasing
-         - timestamps are equidistants
-         - data has no missing value
-         - can currently only process single-sample data.
-         - the first <lags> non-na values of the residuals will be excluded.
-         - the first values of the tested variable are excluded, depending on the LearningModel lag, to correspond
-           to residuals.
+    """
 
-        config:
-         - return_type (str):
-           - correlation: the computed association is the pearson correlation
-           - p-value: the computed association is the p-value of the pearson correlation
-         - lags (int): the maximal lag of the variable to use.
-            if set to 0, only the immediate correlation is computed.
-            if > 0, the lag of maximal correlation / minimal p-value amongst the lags is selected.
-         - selection_rule: the rule to use to aggregate the lags
-           - max: use maximal correlation / minimal p-value
-           - average: use average correlation / average p-value
+    #!TODO have an option to directly get log-pvalues in case it is useful.
+    #!TODO replace the pandas manipulations by a higher level data class. This will be hard though.
+    def _cpus_from_njobs(self, n_jobs):
         """
+        Gets the number of available cpu to configure the parallelism.
+        """
+        if n_jobs<0: return cpu_count()+1-n_jobs
+        if n_jobs>0: return n_jobs
+        raise ValueError("n_jobs cannot be equal to 0 (see joblib documentation).")
 
-    def _select_correct_rows(self, residuals_df, variables_df):
-        # remove nans
-        residuals_df = residuals_df[~residuals_df.isnull().any(axis=1)]
-        residuals_indexes = set(residuals_df.index)
-        #adjust variable timestamps to residuals since learning process lags will have reduced the length of the series
-        variables_ilocs = [i for i in range(variables_df.shape[0]) if (variables_df.index[i] in residuals_indexes)]
-        #remove the first <lags> elements of the residuals for mass2_modified computation.
-        residuals_ilocs = list(range(residuals_df.shape[0]))
-        residuals_ilocs = residuals_ilocs[self.config["lags"]:]
+    def _remove_first_missings_from_residuals(self, residuals_df:pd.DataFrame):
+        """
+        Remove the timestamps with NaNs before the first non-NaN value.
+        """
+        first_index = residuals_df.iloc[:,0].first_valid_index()
+        return residuals_df.loc[first_index:]
+
+    def _check_inputs(self, residuals_df:pd.DataFrame, variables_df:pd.DataFrame):
+        """
+        Verifies the conditions in Notes.
+        """
+        check_na = self.config.get("check_na",False)
+        lags = self.config["lags"]
+        if len(residuals_df.columns)>1:
+            raise ValueError("The residuals dataframe must have a single column. {} were provided.".format(len(residuals_df.columns)))
+        if check_na:
+            if residuals_df.isna().any(axis=None):
+                raise ValueError("The residuals contain a NaN after the first non-nan value.")
+            if variables_df.isna().any(axis=None):
+                raise ValueError("The variables contain a NaN.")
+        if residuals_df.index[0] not in variables_df.index:
+            raise IndexError("The first index of residuals_df ({}) is not in variables_df.index.".format(residuals_df.index[0]))
+        if variables_df.index[-1] not in residuals_df.index:
+            raise IndexError("The last index of variables_df ({}) is not in residuals_df.index.".format(variables_df.index[0]))
+        if lags>=len(variables_df):
+            raise ValueError("The lag parameter is {}, but the variables only have {} observations.".format(lags,len(variables_df)))
+        if variables_df.index.get_loc(residuals_df.index[0]) < lags:
+            if variables_df.index[lags] not in residuals_df.index:
+                raise IndexError("Index {} should be in residuals_df.index, but is missing".format(variables_df.index[lags]))
         
-        residuals = residuals_df.iloc[residuals_ilocs].values.reshape((-1,))
-        variables = variables_df.iloc[variables_ilocs].values
+
+    def _select_correct_rows(self, residuals_df:pd.DataFrame, variables_df:pd.DataFrame):
+        """
+        Adjust the residuals and variables indexes for mass computations.
+
+        Notes
+        -----
+        If the variables span t1 to t2, and residuals from t3 to t4, we will select:
+         - variables[t1:t2], residuals[t1+lags:t2] if t3<t1+lags
+         - variables[t3-lags:t2], residuals[t3:t2] if t3>=t1+lags
+        """
+        lags = self.config["lags"]
+        
+        ## select residuals and variables so that variables starts lags step before resid.
+        first_iloc = variables_df.index.get_loc(residuals_df.index[0])
+        if first_iloc >= lags:
+            variables_df = variables_df.iloc[first_iloc-lags:]
+        else:
+            first_iloc = residuals_df.index.get_loc(variables_df.index[lags])
+            residuals_df = residuals_df.iloc[first_iloc:]
+
+        ## select residuals so that variables ends at the same step as resid
+        last_iloc = residuals_df.index.get_loc(variables_df.index[-1])
+        residuals_df = residuals_df.iloc[:last_iloc+1]
+
+        ## return numpy arrays
+        residuals = residuals_df.to_numpy().reshape((-1,))
+        variables = variables_df.to_numpy()
         return residuals, variables
 
-    def association(self, residuals_df, variables_df):
-    
-        residuals, variables = self._select_correct_rows(residuals_df, variables_df)
-
-        # constant residuals? Everything is uncorrelated
-        if len(np.unique(residuals))==1:
-            if self.config["return_type"] == "p-value":
-                return np.ones(variables.shape[1])
-            else:
-                return np.zeros(variables.shape[1])
-
-        if self.config["lags"] == 1:  # edge case of the fft
-            # constant variables get correlation 0
-            coefficients = [[pearsonr(residuals,variables[:-1,i]).correlation]\
-                            if not len(np.unique(variables[:-1,i]))==1 else [0]\
-                            for i in range(variables.shape[1])]
-            coefficients = np.array(coefficients)
-        else:
-            # mass2 is the computation bottleneck due to fft.
-            # Solution: parallelize. Empirically, splitting into sqrt(D) groups is looks best.
-            column_split = np.array_split(list(range(variables.shape[1])),int(np.sqrt(variables.shape[1])))
-            res = Parallel(n_jobs=-1)(delayed(mass2_modified)(variables[:,list(cols)], residuals) for cols in column_split)
-            coefficients = np.concatenate(list(res), axis=0)
-
-        if self.config["return_type"] == "p-value":
-            # next 3 lines taken from scipy.stats.pearsonr
-            ab = len(residuals)/2 - 1  # len(residuals) is the total sample size over which correlation is computed
-            beta_distribution = beta(ab, ab, loc=-1, scale=2)
-            pvalues = - 2 * beta_distribution.sf(np.abs(coefficients))
-        
-            self.pvalues = dict((variable, -pvalues[i])for i,variable in enumerate(variables_df.columns))
-
-
-        if self.config["selection_rule"] == "max":
-            return np.max(pvalues, axis=-1)
-        elif self.config["selection_rule"] == "average":
-            return np.mean(pvalues, axis=-1)
-        else:
-            raise(NotImplementedError)
-    
-
-
-class SpearmanMultivariate(PearsonMultivariate):
-    """
-    Computes for each lag up to <lags> of the given variables, its <return_type> with the residuals.
-    The result is then aggregated into a single score using <selection_rule>.
-
-        Prefered use case:
-         - many lags have to be computed
-
-        Data assumption:
-         - dataframe is sorted by timestamp increasing
-         - timestamps are equidistants
-         - data has no missing value
-         - can currently only process single-sample data.
-         - the first <lags> non-na values of the residuals will be excluded.
-         - the first values of the tested variable are excluded, depending on the LearningModel lag, to correspond
-           to residuals.
-
-        config:
-         - return_type (str):
-           - correlation: the computed association is the pearson correlation
-           - p-value: the computed association is the p-value of the pearson correlation
-         - lags (int): the maximal lag of the variable to use.
-            if set to 0, only the immediate correlation is computed.
-            if > 0, the lag of maximal correlation / minimal p-value amongst the lags is selected.
-         - selection_rule: the rule to use to aggregate the lags
-           - max: use maximal correlation / minimal p-value
-           - average: use average correlation / average p-value
+    def _handle_constant_residuals(self, variables):
         """
+        Return a matrix of zero correlations.
+        """
+        lags = self.config["lags"]
+        return np.zeros((variables.shape[1],lags))
+    
+    def _is_pearsonr_faster(self, residuals_shape, variables_shape):
+        """
+        Chooses whether to use standard correlation or fft-accelerated correlation.
+        """
+        lags = self.config["lags"]
+        #!TODO make a better choice of the fastest process between the fft and the pearsonr depending on T and lags.
+        return lags == 1
+
+    def _distribute_independence_tests(self, residuals, variables):
+        """
+        Handle the parallelization of the correlation computation according to the n_jobs parameter.
+        """
+        n_jobs = self.config.get("n_jobs", -1)
+        cpus_available = self._cpus_from_njobs(n_jobs)
+        column_split = np.array_split(list(range(variables.shape[1])),min(variables.shape[1],cpus_available))
+        res = Parallel(n_jobs=n_jobs)(delayed(lambda x,y:self._apply_independence_tests(x,y))(residuals, variables[:,list(cols)]) for cols in column_split)
+        lagged_correlations = np.concatenate(list(res), axis=0)
+        return lagged_correlations
+    
+    def _apply_independence_tests(self, residuals, variables):
+        """
+        Compute the correlations without using fft acceleration.
+        """
+        lags = self.config.get("lags", 1)
+        lagged_correlations = [[pearsonr(residuals,variables[lags-l:-l,i]).correlation\
+                        if not len(np.unique(variables[lags-l:-l,i]))==1 else 0\
+                        for l in range(lags, 0,-1)] \
+                        for i in range(variables.shape[1])]  # constant data verification is done here.
+        lagged_correlations = np.array(lagged_correlations)
+        return lagged_correlations
+        
+    
+    def _apply_mass2(self, residuals, variables):
+        """
+        Parallelizes the computation of the correlation with fft acceleration.
+        """
+        n_jobs = self.config.get("n_jobs", -1)
+        cpus_available = self._cpus_from_njobs(n_jobs)
+        column_split = np.array_split(list(range(variables.shape[1])),min(variables.shape[1],cpus_available))
+        res = Parallel(n_jobs=n_jobs)(delayed(mass2_modified)(variables[:,list(cols)], residuals) for cols in column_split)
+        coefficients = np.concatenate(list(res), axis=0)
+        return coefficients
+
+    def _to_pvalues(self, lagged_correlations, sample_size:int):
+        """
+        For the pearson r coefficient, compute the p-value using the beta distribution.
+        """
+        # next 3 lines taken from scipy.stats.pearsonr
+        ab = sample_size/2 - 1 
+        beta_distribution = beta(ab, ab, loc=-1, scale=2)
+        pvalues = 2 * beta_distribution.sf(np.abs(lagged_correlations))
+        return pvalues
+    
     def _compute_ranks(self,residuals,variables):
         rr = rankdata(residuals)
         rv = rankdata(variables,axis=0)
         return rr,rv
+    
+    def _to_pvalues_spearman(self,lagged_coefficients, sample_size):
+        """
+        For the spearman coefficient, compute the p-value using the student distribution.
+        """
+        # next lines taken from scipy.stats
+        dof = sample_size - 2
+        coefficients = lagged_coefficients * np.sqrt((dof/((lagged_coefficients+1.0)*(1.0-lagged_coefficients))).clip(0))
+        coefficients = stdtr(dof, -np.abs(coefficients))*2
+        return coefficients
+    
 
     def association(self, residuals_df, variables_df):
-        #align mts
+        numerical_method = self.config.get("numerical_method","pearson")
+
+        residuals_df = self._remove_first_missings_from_residuals(residuals_df)
+        self._check_inputs(residuals_df, variables_df)
         residuals, variables = self._select_correct_rows(residuals_df, variables_df)
 
-        #spearman computation: ranks are necessary
-        residuals, variables = self._compute_ranks(residuals,variables)
-        #parallel computation
-        column_split = np.array_split(list(range(variables.shape[1])),int(np.sqrt(variables.shape[1])))
-        res = Parallel(n_jobs=-1)(delayed(mass2_modified)(variables[:,list(cols)], residuals) for cols in column_split)
-        coefficients = np.concatenate(list(res), axis=0)
+        if numerical_method == "spearman":
+            residuals, variables = self._compute_ranks(residuals,variables)
 
-        #pvalues
-        if self.config["return_type"] == "p-value":
-            # next lines taken from scipy.stats
-            dof = len(residuals) - 2
-            # test statistic
-            coefficients = coefficients * np.sqrt((dof/((coefficients+1.0)*(1.0-coefficients))).clip(0))
-            # comparision with student t
-            coefficients = stdtr(dof, -np.abs(coefficients))*2
+        # constant residuals
+        if len(np.unique(residuals))==1:
+            lagged_correlations = self._handle_constant_residuals(variables)
+        # pearsonr would be faster as there are too few lags for the fft to be worth it
+        elif self._is_pearsonr_faster(residuals.shape, variables.shape):
+            lagged_correlations = self._distribute_independence_tests(residuals, variables)
+        else:
+            lagged_correlations = self._apply_mass2(residuals, variables)
+        # transform to p-values
+        if numerical_method == "spearman":
+            pvalues = self._to_pvalues_spearman(lagged_correlations, residuals.shape[0])
+        else:
+            pvalues = self._to_pvalues(lagged_correlations, residuals.shape[0])
+        self.pvalues = dict((variable, pvalues[i])for i,variable in enumerate(variables_df.columns))
         
-            self.pvalues = {(variable, coefficients[i])for i,variable in enumerate(variables_df.columns)}
+        return np.max(-pvalues, axis=-1)
 
-        if self.config["selection_rule"] == "max":
-            return np.max(coefficients, axis=-1)
-        elif self.config["selection_rule"] == "average":
-            return np.mean(coefficients, axis=-1)
+    
+
+
+# class SpearmanMultivariate(PearsonMultivariate):
+#     """
+#     Spearman Correlation for numerical data.
+#     """
+#     def _compute_ranks(self,residuals,variables):
+#         rr = rankdata(residuals)
+#         rv = rankdata(variables,axis=0)
+#         return rr,rv
+    
+#     def _to_pvalues_spearman(self,lagged_coefficients, sample_size):
+#         # next lines taken from scipy.stats
+#         dof = sample_size - 2
+#         coefficients = lagged_coefficients * np.sqrt((dof/((lagged_coefficients+1.0)*(1.0-lagged_coefficients))).clip(0))
+#         coefficients = stdtr(dof, -np.abs(coefficients))*2
+#         return coefficients
+
+#     def association(self, residuals_df, variables_df):
+#         residuals_df = self._remove_first_missings_from_residuals(residuals_df)
+#         self._check_inputs(residuals_df, variables_df)
+#         residuals, variables = self._select_correct_rows(residuals_df, variables_df)
+
+#         # spearman transformation to ranks
+#         residuals, variables = self._compute_ranks(residuals,variables)
+
+#         # constant residuals
+#         if len(np.unique(residuals))==1:
+#             lagged_correlations = self._handle_constant_residuals(variables)
+#         # pearsonr would be faster as there are too few lags for the fft to be worth it
+#         elif self._is_pearsonr_faster(residuals.shape, variables.shape):
+#             lagged_correlations = self._apply_pearsonr(residuals, variables)
+#         else:
+#             lagged_correlations = self._apply_mass2(residuals, variables)
+#         # transform to p-values
+#         pvalues = self._to_pvalues(lagged_correlations, residuals.shape[0])
+#         self.pvalues = dict((variable, pvalues[i])for i,variable in enumerate(variables_df.columns))
+        
+#         return np.max(-pvalues, axis=-1)
+        
 
 
 
 class ANOVATemporalSlow(PearsonMultivariate):
-    def association(self, residuals_df, variables_df):
-        residuals, variables = self._select_correct_rows(residuals_df, variables_df)
+    """
+    Independence test for numerical residuals and categorical variables.
+    """
+    #!TODO vectorize as much as possible _distributed_pearsonr
 
-        self.pvalues = dict()
-        pvalues = np.ones(shape=(len(variables_df.columns),))
+    def _apply_independence_tests(self, residuals, variables):
+        lags = self.config.get("lags", 1)
+        categorical_method = self.config["categorical_method"]
 
-        #import warnings
-        #warnings.filterwarnings("error")
-
+        lagged_pvalues = np.zeros((variables.shape[1],lags))
         for variable in range(variables.shape[1]):
-            self.pvalues[variables_df.columns[variable]] = []
-
             ncategories = sorted(np.unique(variables[:,variable]))
             categorical_filters = [variables[:,variable]==category for category in ncategories]
-            
-            for lag in range(self.config["lags"]):
-                samples = [residuals[mask[lag:-self.config["lags"]+lag]] for mask in categorical_filters]
-                # due to how f_oneway works, we must avoid length zero samples.
+
+            for l in range(lags):
+                samples = [residuals[mask[l:-lags+l]] for mask in categorical_filters]
+                # we must avoid length zero groups of values
                 samples = [s for s in samples if len(s)>0]
                 
-                if self.config["categorical_method"] == "f_oneway":
+                if categorical_method == "f_oneway":
                     pval = f_oneway(*samples).pvalue if len(samples)>1 else 1.  # if one sample only, no link.
-                elif self.config["categorical_method"] == "kruskal":
+                elif categorical_method == "kruskal":
                     pval = kruskal(*samples).pvalue if len(samples)>1 else 1.
-                elif self.config["categorical_method"] == "alexandergovern":
+                elif categorical_method == "alexandergovern":
                     pval = alexandergovern(*samples).pvalue if len(samples)>1 else 1.
+                else:
+                    raise ValueError("Configuration categorical_method must be one of f_oneway, kruskal, alexandergovern.")
 
-                self.pvalues[variables_df.columns[variable]].append(pval)
-                pvalues[variable] = min(pvalues[variable], pval)
+                lagged_pvalues[variable,l] = pval
+        return lagged_pvalues
 
-            self.pvalues[variables_df.columns[variable]] = np.array(self.pvalues[variables_df.columns[variable]])
+    def association(self, residuals_df, variables_df):
+        residuals_df = self._remove_first_missings_from_residuals(residuals_df)
+        self._check_inputs(residuals_df, variables_df)
+        residuals, variables = self._select_correct_rows(residuals_df, variables_df)
 
-        return -pvalues
+        # constant residuals
+        if len(np.unique(residuals))==1:
+            pvalues = self._handle_constant_residuals(variables)+1
+        else:
+            pvalues = self._distribute_independence_tests(residuals, variables)
+        self.pvalues = dict((variable, pvalues[i])for i,variable in enumerate(variables_df.columns))
+        
+        return np.max(-pvalues, axis=-1)
+
+
+
+class TemporalSlowAssociation(Association):
+    """Temporal data mixed-type association.
+
+    Notes
+    -----
+    For continuous data, we use Pearson Correlation with mass implementation.
+    For categorical data, we use an ANOVA test between the residuals and the tested series.
+    """
+
+    def __init__(self, config: dict):
+        """ 
+        Parameters
+        ----------
+        config: dict
+            Must contain an entry for:
+             - "lags": int, the number of lags to compute the correlation over
+             - "categorical_method": str, any of 'f_oneway', 'kruskal', 'alexandergovern'.
+                This specifies the kind of test used for categorical data.
+             - "numerical_method": str, any of 'pearson', 'spearman'.
+             - "variable_types": dict, for each variable name, whether it is "numerical" or "categorical".
+                See examples.
+             - "n_jobs": int, the number of processors used in parallel. Must be different from 0. See joblib.Parallel for more information.
+             - "check_na": bool, if True, checks that there is no NaN in the variables and residuals dataframe.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> data = pd.DataFrame(np.random.random(size=(1000,5)),columns=["target","1","2","3","4"])
+        >>> variable_types = dict([(column, "numerical") for column in data.columns])
+        >>> asso = TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
+        >>> asso
+
+        Or with mixed types:
+
+        >>> numerical = pd.DataFrame(np.random.random(size=(1000,3)),columns=["target","1","2"])
+        >>> categorical = pd.DataFrame(np.random.randint(size=(1000,2)),columns=["3","4"])
+        >>> data = pd.concat([numerical,categorical], axis="columns")
+        >>> variable_types = {"target":"numerical","1":"numerical","2":"numerical","3":"categorical","4":"categorical"}
+        >>> asso = TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
+        >>> asso
+        """
+        super().__init__(config)
+
+
+    def association(self,residuals_df:pd.DataFrame, variables_df:pd.DataFrame)-> np.array:
+        """ 
+        Computes the association score between the residuals and candidate time series.
+
+        Parameters
+        ----------
+        residuals_df: pd.DataFrame
+            DataFrame of shape (ntimesteps, 1) containing the model residuals of a learning model. 
+            The index must be aligned with variables_df.
+        variables_df: pd.DataFrame
+            DataFrame of shape (ntimesteps, D) containing the D time series to test for association with the residuals.
+            The index must be aligned with residuals_df
+
+        Returns
+        -------
+        pvalues: np.array
+            A 1D numpy array containing minus the minimal p-value across lags, for each of the D time series to test.
+            The coefficients are in the same order as the columns in variables_df.columns.
+            We return minus the p-value by convention, as the maximal -pvalue correspond to the maximal association.
+
+        Examples
+        --------
+        >>> rng = np.random.default_rng(0)
+        >>> data = pd.DataFrame(rng.random(size=(1000,5)),columns=["target","1","2","3","4"])
+        >>> variable_types = dict([(column, "numerical") for column in data.columns])
+        >>> asso = TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
+        >>> asso.association(data[["target"]], data[["1","2","3","4"]])
+        array([-0.03384917, -0.02838155, -0.0633841 , -0.15107386])
+
+        Or with mixed types:
+
+        >>> rng = np.random.default_rng(0)
+        >>> numerical = pd.DataFrame(rng.random(size=(1000,3)),columns=["target","1","2"])
+        >>> categorical = pd.DataFrame(rng.integers(0,3,size=(1000,2)),columns=["3","4"])
+        >>> data = pd.concat([numerical,categorical], axis="columns")
+        >>> variable_types = {"target":"numerical","1":"numerical","2":"numerical","3":"categorical","4":"categorical"}
+        >>> asso = TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
+        >>> asso.association(data[["target"]], data[["1","2","3","4"]])
+        array([-0.03111284, -0.04568282, -0.03302831, -0.02551908])
+        """
+
+        variable_types = self.config["variable_types"]
+
+        # numerical TS
+        pearson_obj = PearsonMultivariate(self.config)
+        numerical_variables = [x for x in variables_df.columns if variable_types[x]=="numerical"]
+        if len(numerical_variables)>0:
+            numerical_pvalues = pearson_obj.association(residuals_df, variables_df[numerical_variables])
+        else:
+            numerical_pvalues = []
+
+        # categorical TS
+        anova_obj = ANOVATemporalSlow(self.config)
+        categorical_variables = [x for x in variables_df.columns if variable_types[x]=="categorical"]
+        if len(categorical_variables)>0:
+            categorical_pvalues = anova_obj.association(residuals_df, variables_df[categorical_variables])
+        else:
+            categorical_pvalues = []
+
+        # mix
+        index_num, index_cat = 0,0
+        pvalues = []
+        for variable in variables_df.columns:
+            if variable_types[variable] == "numerical":
+                pvalues.append(numerical_pvalues[index_num]) 
+                index_num+=1
+            elif variable_types[variable] == "categorical":
+                pvalues.append(categorical_pvalues[index_cat])
+                index_cat+=1
+
+        self.pvalues = {**pearson_obj.pvalues, **anova_obj.pvalues}
+        return np.array(pvalues)
 
 
 class CrossSectionalAssociation(Association):
@@ -357,179 +575,6 @@ class CrossSectionalAssociation(Association):
         pvalues = [pvalues[v] for v in col_names]
         pvalues = [np.min(lagpval) for lagpval in pvalues] # take minimum of pvalues of each variable
         return -np.array(pvalues)
-
-
-class TemporalSlowAssociation(Association):
-    """Temporal data mixed-type association.
-
-    Notes
-    -----
-    For continuous data, we use Pearson Correlation with mass implementation.
-    For categorical data, we use an ANOVA test between the residuals and the tested series.
-    """
-
-    def __init__(self, config: dict):
-        """ 
-        Parameters
-        ----------
-        config: dict
-            Must contain an entry for:
-             - "lags": int, the number of lags to compute the correlation over
-             - "categorical_method": str, any of 'f_oneway', 'kruskal', 'alexandergovern'.
-                This specifies the kind of test used for categorical data.
-             - "variable_types": dict, for each variable name, whether it is "numerical" or "categorical".
-                See examples.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        >>> data = pd.DataFrame(np.random.random(size=(1000,5)),columns=["target","1","2","3","4"])
-        >>> variable_types = dict([(column, "numerical") for column in data.columns])
-        >>> asso = TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
-        >>> asso
-
-        Or with mixed types:
-
-        >>> numerical = pd.DataFrame(np.random.random(size=(1000,3)),columns=["target","1","2"])
-        >>> categorical = pd.DataFrame(np.random.randint(size=(1000,2)),columns=["3","4"])
-        >>> data = pd.concat([numerical,categorical], axis="columns")
-        >>> variable_types = {"target":"numerical","1":"numerical","2":"numerical","3":"categorical","4":"categorical"}
-        >>> asso = TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
-        >>> asso
-        """
-        super().__init__(config)
-
-
-    def association(self,residuals_df:pd.DataFrame, variables_df:pd.DataFrame)-> np.array:
-        """ 
-        Computes the association score between the residuals and candidate time series.
-
-        Parameters
-        ----------
-        residuals_df: pd.DataFrame
-            DataFrame of shape (ntimesteps, 1) containing the model residuals of a learning model. 
-            The index must be aligned with variables_df.
-        variables_df: pd.DataFrame
-            DataFrame of shape (ntimesteps, D) containing the D time series to test for association with the residuals.
-            The index must be aligned with residuals_df
-
-        Returns
-        -------
-        pvalues: np.array
-            A 1D numpy array containing minus the minimal p-value across lags, for each of the D time series to test.
-            The coefficients are in the same order as the columns in variables_df.columns.
-            We return minus the p-value by convention, as the maximal -pvalue correspond to the maximal association.
-
-        Examples
-        --------
-        >>> rng = np.random.default_rng(0)
-        >>> data = pd.DataFrame(rng.random(size=(1000,5)),columns=["target","1","2","3","4"])
-        >>> variable_types = dict([(column, "numerical") for column in data.columns])
-        >>> asso = TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
-        >>> asso.association(data[["target"]], data[["1","2","3","4"]])
-        array([-0.03384917, -0.02838155, -0.0633841 , -0.15107386])
-
-        Or with mixed types:
-
-        >>> rng = np.random.default_rng(0)
-        >>> numerical = pd.DataFrame(rng.random(size=(1000,3)),columns=["target","1","2"])
-        >>> categorical = pd.DataFrame(rng.integers(0,3,size=(1000,2)),columns=["3","4"])
-        >>> data = pd.concat([numerical,categorical], axis="columns")
-        >>> variable_types = {"target":"numerical","1":"numerical","2":"numerical","3":"categorical","4":"categorical"}
-        >>> asso = TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
-        >>> asso.association(data[["target"]], data[["1","2","3","4"]])
-        array([-0.03111284, -0.04568282, -0.03302831, -0.02551908])
-        """
-
-        variable_types = self.config["variable_types"]
-
-        # numerical TS
-        pearson_obj = PearsonMultivariate({"return_type":"p-value","selection_rule":"max",**self.config})
-        numerical_variables = [x for x in variables_df.columns if variable_types[x]=="numerical"]
-        if len(numerical_variables)>0:
-            numerical_pvalues = pearson_obj.association(residuals_df, variables_df[numerical_variables])
-        else:
-            numerical_pvalues = []
-
-        # categorical TS
-        anova_obj = ANOVATemporalSlow({"categorical_method":self.config["categorical_method"],**self.config})
-        categorical_variables = [x for x in variables_df.columns if variable_types[x]=="categorical"]
-        if len(categorical_variables)>0:
-            categorical_pvalues = anova_obj.association(residuals_df, variables_df[categorical_variables])
-        else:
-            categorical_pvalues = []
-
-        # mix
-        index_num, index_cat = 0,0
-        pvalues = []
-        for variable in variables_df.columns:
-            if variable in numerical_variables:  # unoptimized
-                pvalues.append(numerical_pvalues[index_num]) 
-                index_num+=1
-            elif variable in categorical_variables:  # unoptimized
-                pvalues.append(categorical_pvalues[index_cat])
-                index_cat+=1
-
-        self.pvalues = {**pearson_obj.pvalues, **anova_obj.pvalues}
-        return np.array(pvalues)
-
-
-# class TemporalSlowAssociation(Association):
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         # use pearson correlation with fft even with tabular data
-#         #self.config["mass_with_numerical"] = True
-
-#     #def reshape_to_cross_sectional(self,df):
-#     #    lags = self.config["lags"]
-#     #    data = dict()
-#     #    for column in df.columns:
-#     #        for l in range(lags):
-#     #            new_column = df[column].iloc[l:len(df)-lags+l]
-#     #            new_column.index = df.index[lags:]
-#     #            data[(column,l-lags)]=new_column
-#     #    data = pd.DataFrame(data)
-#     #    data.index = df.index[lags:]
-#     #    data.columns = pd.MultiIndex.from_tuples(data.columns)
-#     #    return data
-        
-#     def association(self,residuals_df, variables_df):
-
-#         # numerical TS
-#         variable_types = self.config["variable_types"]
-#         pearson_obj = PearsonMultivariate({"return_type":"p-value","selection_rule":"max",**self.config})
-#         numerical_variables = [x for x in variables_df.columns if x in variable_types["numerical"]]
-#         if len(numerical_variables)>0:
-#             numerical_pvalues = pearson_obj.association(residuals_df, variables_df[numerical_variables])
-#         else:
-#             numerical_pvalues = []
-
-#         # categorical TS
-#         categorical_variables = [x for x in variables_df.columns if x in variable_types["categorical"]]
-#         #categorical_variables_df = self.reshape_to_cross_sectional(variables_df[categorical_variables])
-#         #categorical_pvalues = super(TemporalSlowAssociation,self).association(residuals_df, variables_df)
-#         anova_obj = ANOVATemporalSlow({"method":self.config["categorical_method"],**self.config})
-#         categorical_variables = [x for x in variables_df.columns if x in variable_types["categorical"]]
-#         if len(categorical_variables)>0:
-#             categorical_pvalues = anova_obj.association(residuals_df, variables_df[categorical_variables])
-#         else:
-#             categorical_pvalues = []
-
-#         # mix
-#         index_num, index_cat = 0,0
-#         pvalues = []
-#         for variable in variables_df.columns:
-#             if variable in numerical_variables:
-#                 pvalues.append(numerical_pvalues[index_num])
-#                 index_num+=1
-#             elif variable in categorical_variables:
-#                 pvalues.append(categorical_pvalues[index_cat])
-#                 index_cat+=1
-
-#         return np.array(pvalues) 
 
 
     

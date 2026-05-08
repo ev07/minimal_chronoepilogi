@@ -115,16 +115,6 @@ def test_crosssectional_association_mixed_alexandergovern():
 
 # Verify data dimensionality edge cases
 
-def test_temporal_single_ts():
-    data, variable_types = _make_temporal_numerical_data()
-    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
-    _ = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1"]]))
-
-def test_crosssectional_single_group():
-    data, variable_types = _make_crosssectional_numerical_data()
-    asso = associations.CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
-    _ = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["G1"]]))
-
 def test_temporal_single_lag():
     data, variable_types = _make_temporal_numerical_data()
     asso = associations.TemporalSlowAssociation({"lags":1,"categorical_method":"f_oneway","variable_types":variable_types})
@@ -135,10 +125,31 @@ def test_crosssectional_single_groupsize():
     asso = associations.CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
     _ = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[[("G1","a"),("G2","a")]]))
 
+def test_temporal_single_ts_lag100():
+    data, variable_types = _make_temporal_numerical_data()
+    asso = associations.TemporalSlowAssociation({"lags":100,"categorical_method":"f_oneway","variable_types":variable_types})
+    _ = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1"]]))
+
+def test_temporal_single_ts_lag1():
+    data, variable_types = _make_temporal_numerical_data()
+    asso = associations.TemporalSlowAssociation({"lags":1,"categorical_method":"f_oneway","variable_types":variable_types})
+    _ = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1"]]))
+
+def test_crosssectional_single_group():
+    data, variable_types = _make_crosssectional_numerical_data()
+    asso = associations.CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
+    _ = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["G1"]]))
+
 def test_temporal_two_observation():
     data, variable_types = _make_temporal_numerical_data()
     data = data.iloc[:3]
     asso = associations.TemporalSlowAssociation({"lags":1,"categorical_method":"f_oneway","variable_types":variable_types})
+    _ = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3"]]))
+
+def test_temporal_102_observations_100lags():
+    data, variable_types = _make_temporal_numerical_data()
+    data = data.iloc[:102]
+    asso = associations.TemporalSlowAssociation({"lags":100,"categorical_method":"f_oneway","variable_types":variable_types})
     _ = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3"]]))
 
 def test_crosssectional_two_observation():
@@ -157,6 +168,22 @@ def test_temporal_constant_data():
     asso = associations.TemporalSlowAssociation({"lags":1,"categorical_method":"f_oneway","variable_types":variable_types})
     result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3"]]))
     assert not np.any(np.isnan(result))
+    asso = associations.TemporalSlowAssociation({"lags":100,"categorical_method":"f_oneway","variable_types":variable_types})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3"]]))
+    assert not np.any(np.isnan(result))
+
+def test_temporal_constant_data_categorical():
+    data, variable_types = _make_temporal_mixed_data()
+    data["3"] = 0
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    assert not np.any(np.isnan(result))
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"kruskal","variable_types":variable_types})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    assert not np.any(np.isnan(result))
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"alexandergovern","variable_types":variable_types})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    assert not np.any(np.isnan(result))
 
 def test_temporal_constant_residuals():
     data, variable_types = _make_temporal_numerical_data()
@@ -164,20 +191,36 @@ def test_temporal_constant_residuals():
     asso = associations.TemporalSlowAssociation({"lags":1,"categorical_method":"f_oneway","variable_types":variable_types})
     result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3"]]))
     assert not np.any(np.isnan(result))
+    asso = associations.TemporalSlowAssociation({"lags":100,"categorical_method":"f_oneway","variable_types":variable_types})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3"]]))
+    assert not np.any(np.isnan(result))
 
-# def test_crosssectional_constant_data():
-#     data, variable_types = _make_crosssectional_numerical_data()
-#     data[("G1","a")] = 0
-#     asso = associations.CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
-#     result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["G1","G2"]]))
-#     assert not np.any(np.isnan(result))
+def test_temporal_constant_residuals_categorical():
+    data, variable_types = _make_temporal_mixed_data()
+    data["target"] = 0
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    assert not np.any(np.isnan(result))
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"kruskal","variable_types":variable_types})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    assert not np.any(np.isnan(result))
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"alexandergovern","variable_types":variable_types})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    assert not np.any(np.isnan(result))
 
-# def test_crosssectional_constant_residuals():
-#     data, variable_types = _make_crosssectional_numerical_data()
-#     data[("target","")] = 0
-#     asso = associations.CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
-#     result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["G1","G2"]]))
-#     assert not np.any(np.isnan(result))
+#def test_crosssectional_constant_data():
+#    data, variable_types = _make_crosssectional_numerical_data()
+#    data[("G1","a")] = 0
+#    asso = associations.CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
+#    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["G1","G2"]]))
+#    assert not np.any(np.isnan(result))
+#
+#def test_crosssectional_constant_residuals():
+#    data, variable_types = _make_crosssectional_numerical_data()
+#    data[("target","")] = 0
+#    asso = associations.CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
+#    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["G1","G2"]]))
+#    assert not np.any(np.isnan(result))
 
 
 # input types: cannot throw an error due to types
@@ -191,3 +234,37 @@ def test_crosssectional_npinteger():
     data, variable_types = _make_crosssectional_npinteger_data()
     asso = associations.CrossSectionalAssociation({"categorical_method":"f_oneway","variable_types":variable_types})
     _ = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["G1","G2"]]))
+
+# parallelism: make sure n_jobs does not crash the associations
+
+def test_temporal_slow_association_mixed_1job():
+    data, variable_types = _make_temporal_mixed_data()
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types,"n_jobs":1})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    npt.assert_allclose(result, np.array([-0.03111284, -0.04568282, -0.03302831, -0.02551908]), atol=1e-8)
+
+def test_temporal_slow_association_mixed_m1job():
+    data, variable_types = _make_temporal_mixed_data()
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types,"n_jobs":-1})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    npt.assert_allclose(result, np.array([-0.03111284, -0.04568282, -0.03302831, -0.02551908]), atol=1e-8)
+
+def test_temporal_slow_association_mixed_3job():
+    data, variable_types = _make_temporal_mixed_data()
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types,"n_jobs":3})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    npt.assert_allclose(result, np.array([-0.03111284, -0.04568282, -0.03302831, -0.02551908]), atol=1e-8)
+
+def test_temporal_slow_association_mixed_m3job():
+    data, variable_types = _make_temporal_mixed_data()
+    asso = associations.TemporalSlowAssociation({"lags":10,"categorical_method":"f_oneway","variable_types":variable_types,"n_jobs":-3})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    npt.assert_allclose(result, np.array([-0.03111284, -0.04568282, -0.03302831, -0.02551908]), atol=1e-8)
+
+# spearman correlation
+
+def test_temporal_slow_association_mixed_spearman():
+    data, variable_types = _make_temporal_mixed_data()
+    asso = associations.TemporalSlowAssociation({"lags":10,"numerical_method":"spearman","categorical_method":"f_oneway","variable_types":variable_types})
+    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["1","2","3","4"]]))
+    npt.assert_allclose(result, np.array([-0.03071761, -0.0465202,  -0.03302831, -0.02551908]), atol=1e-8)
