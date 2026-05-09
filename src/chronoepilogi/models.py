@@ -16,6 +16,10 @@ import numpy as np
 import pandas as pd
 import pydash
 
+import abc
+import logging
+from typing import Any, Dict, Optional
+
 # custom error for ARDL model
 
 class NotEnoughDataError(ValueError):
@@ -32,7 +36,12 @@ class NotEnoughDataError(ValueError):
 ##
 
 
-class LearningModel:
+
+
+class NotFittedError(Exception):
+    pass
+
+class LearningModel(abc.ABC):
     """
     Base class of a predictive model used in ChronoEpilogi.
 
@@ -46,7 +55,7 @@ class LearningModel:
     See data format documentation for precisions.
     """
 
-    def __init__(self, config:dict, target:str)->None:
+    def __init__(self, config: Dict[str, Any], target: str) -> None:
         """Initialize a learning model.
 
         Parameters
@@ -61,17 +70,22 @@ class LearningModel:
         -------
         None
         """
-        self.config = config
-        self.target = target
-        
-        self.data = None
-        self.model = None
+        self.config: Dict[str, Any] = config
+        self.target: str = target
+        self.data: Optional[pd.DataFrame] = None
+        self.model: Any = None
+        self.fitted: bool = False
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self._validate_params()
 
-    #
-    # part that need to be implemented for each learning model    
-    #
-    
-    def fit(self, data:pd.DataFrame)->None:
+    def _validate_params(self) -> None:
+        if not isinstance(self.config, dict):
+            raise ValueError("config must be a dictionary.")
+        if not isinstance(self.target, str):
+            raise ValueError("target must be a string.")
+
+    @abc.abstractmethod
+    def fit(self, data: pd.DataFrame) -> None:
         """Fit the model on the provided data.
 
         Parameters
@@ -92,10 +106,10 @@ class LearningModel:
         The method MUST save the data used to train the model in self.data.
         """
         self.data = data
-        
-        raise NotImplementedError
+        self.fitted = True
 
-    def fittedvalues(self, data: None|pd.DataFrame=None)->pd.Series:
+    @abc.abstractmethod
+    def fittedvalues(self, data: Optional[pd.DataFrame] = None) -> pd.Series:
         """Produces the predicted values.
 
         Parameters
@@ -113,14 +127,16 @@ class LearningModel:
         -----
         Would correspond to a .predict operation in other libraries.
         """
+        if not self.fitted:
+            raise NotFittedError("Model must be fitted before calling fittedvalues.")
         if data is None:
             if self.data is None:
-                raise(Exception("data was not passed as an argument, and self.data is None.\nHave you set self.data during the call to self.fit?"))
+                raise NotFittedError("data was not passed as an argument, and self.data is None.\nHave you set self.data during the call to self.fit?")
             data = self.data
+        # ...implementation in subclass...
 
-        raise NotImplementedError
-        
-    def stopping_metric(self, previous_model:"LearningModel", method:str="")->float:
+    @abc.abstractmethod
+    def stopping_metric(self, previous_model: "LearningModel", method: str = "") -> float:
         """Metric by which model equivalence is tested.
 
         Parameters
@@ -141,9 +157,10 @@ class LearningModel:
         If the metric is higher than the threshold, we consider the models equivalent.
         If the metric is lower than the threshold, we consider the current model more powerful than the previous model.
         """
-        raise NotImplementedError
-    
-    def has_too_many_parameters(self, ratio:float)->bool:
+        pass
+
+    @abc.abstractmethod
+    def has_too_many_parameters(self, ratio: float) -> bool:
         """(Legacy) Flag specifying whether the model is too large to be trained.
 
         Parameters
@@ -162,13 +179,9 @@ class LearningModel:
         Originally, it was used to prevent models from being fitted on datasets with too low sample size compared to number of model parameters.
         May return False constantly if this is no concern for the present model.
         """
-        raise NotImplementedError
-        
-    #
-    # part that can be let as-is or modified after inheritance.
-    #
-    
-    def residuals(self, data:None|pd.DataFrame=None)->pd.DataFrame:
+        pass
+
+    def residuals(self, data: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """Compute modeling residuals.
         
         Parameters
@@ -209,9 +222,11 @@ class LearningModel:
                1
         100  0.0
         """
+        if not self.fitted:
+            raise NotFittedError("Model must be fitted before calling residuals.")
         if data is None:
             if self.data is None:
-                raise(Exception("data was not passed as an argument, and self.data is None.\nHave you set self.data during the call to self.fit?"))
+                raise NotFittedError("data was not passed as an argument, and self.data is None.\nHave you set self.data during the call to self.fit?")
             data = self.data
 
         fittedvalues = self.fittedvalues(data)
@@ -220,6 +235,10 @@ class LearningModel:
         residuals = targetdata - fittedvalues
         residuals_df = pd.DataFrame({self.target: residuals})
         return residuals_df
+
+    def log(self, message: str, level: int = logging.INFO) -> None:
+        self.logger.log(level, message)
+
 
 
 
