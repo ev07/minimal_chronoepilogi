@@ -1,4 +1,4 @@
-from scipy.stats import pearsonr, beta, rankdata, t, f_oneway, kruskal, alexandergovern
+from scipy.stats import pearsonr,spearmanr, beta, rankdata, t, f_oneway, kruskal, alexandergovern
 from scipy.special import stdtr
 from statsmodels.regression.linear_model import OLS
 import pingouin
@@ -181,7 +181,7 @@ class PearsonMultivariate(Association):
     
     def _to_pvalues_spearman(self,lagged_coefficients, sample_size):
         """
-        For the spearman coefficient, compute the p-value using the student distribution.
+        For the spearman r coefficient, compute the p-value using the student distribution.
         """
         # next lines taken from scipy.stats
         dof = sample_size - 2
@@ -191,13 +191,13 @@ class PearsonMultivariate(Association):
     
 
     def association(self, residuals_df, variables_df):
-        numerical_method = self.config.get("numerical_method","pearson")
+        numerical_method = self.config.get("numerical_method","pearsonr")
 
         residuals_df = self._remove_first_missings_from_residuals(residuals_df)
         self._check_inputs(residuals_df, variables_df)
         residuals, variables = self._select_correct_rows(residuals_df, variables_df)
 
-        if numerical_method == "spearman":
+        if numerical_method == "spearmanr":
             residuals, variables = self._compute_ranks(residuals,variables)
 
         # constant residuals
@@ -209,57 +209,17 @@ class PearsonMultivariate(Association):
         else:
             lagged_correlations = self._apply_mass2(residuals, variables)
         # transform to p-values
-        if numerical_method == "spearman":
+        if numerical_method == "spearmanr":
             pvalues = self._to_pvalues_spearman(lagged_correlations, residuals.shape[0])
-        else:
+        elif numerical_method == "pearsonr":
             pvalues = self._to_pvalues(lagged_correlations, residuals.shape[0])
+        else:
+            raise ValueError(f"Unknown categorical_method: {numerical_method}. Must be one of 'pearsonr' and 'spearmanr'.")
         self.pvalues = dict((variable, pvalues[i])for i,variable in enumerate(variables_df.columns))
         
         return np.max(-pvalues, axis=-1)
 
     
-
-
-# class SpearmanMultivariate(PearsonMultivariate):
-#     """
-#     Spearman Correlation for numerical data.
-#     """
-#     def _compute_ranks(self,residuals,variables):
-#         rr = rankdata(residuals)
-#         rv = rankdata(variables,axis=0)
-#         return rr,rv
-    
-#     def _to_pvalues_spearman(self,lagged_coefficients, sample_size):
-#         # next lines taken from scipy.stats
-#         dof = sample_size - 2
-#         coefficients = lagged_coefficients * np.sqrt((dof/((lagged_coefficients+1.0)*(1.0-lagged_coefficients))).clip(0))
-#         coefficients = stdtr(dof, -np.abs(coefficients))*2
-#         return coefficients
-
-#     def association(self, residuals_df, variables_df):
-#         residuals_df = self._remove_first_missings_from_residuals(residuals_df)
-#         self._check_inputs(residuals_df, variables_df)
-#         residuals, variables = self._select_correct_rows(residuals_df, variables_df)
-
-#         # spearman transformation to ranks
-#         residuals, variables = self._compute_ranks(residuals,variables)
-
-#         # constant residuals
-#         if len(np.unique(residuals))==1:
-#             lagged_correlations = self._handle_constant_residuals(variables)
-#         # pearsonr would be faster as there are too few lags for the fft to be worth it
-#         elif self._is_pearsonr_faster(residuals.shape, variables.shape):
-#             lagged_correlations = self._apply_pearsonr(residuals, variables)
-#         else:
-#             lagged_correlations = self._apply_mass2(residuals, variables)
-#         # transform to p-values
-#         pvalues = self._to_pvalues(lagged_correlations, residuals.shape[0])
-#         self.pvalues = dict((variable, pvalues[i])for i,variable in enumerate(variables_df.columns))
-        
-#         return np.max(-pvalues, axis=-1)
-        
-
-
 
 class ANOVATemporalSlow(PearsonMultivariate):
     """
@@ -327,11 +287,11 @@ class TemporalSlowAssociation(Association):
              - "lags": int, the number of lags to compute the correlation over
              - "categorical_method": str, any of 'f_oneway', 'kruskal', 'alexandergovern'.
                 This specifies the kind of test used for categorical data.
-             - "numerical_method": str, any of 'pearson', 'spearman'.
+             - "numerical_method": str, any of 'pearsonr', 'spearmanr'.
              - "variable_types": dict, for each variable name, whether it is "numerical" or "categorical".
                 See examples.
              - "n_jobs": int, the number of processors used in parallel. Must be different from 0. See joblib.Parallel for more information.
-             - "check_na": bool, if True, checks that there is no NaN in the variables and residuals dataframe.
+             - "check_na": bool, if True, checks that there is no NaN in the variables and residuals DataFrames.
 
         Returns
         -------
@@ -450,10 +410,13 @@ class CrossSectionalAssociation(Association):
             Must contain an entry for:
              - "categorical_method": str, any of 'f_oneway', 'kruskal', 'alexandergovern'.
                 This specifies the kind of test used for categorical data.
+             - "numerical_method": str, any of 'pearsonr', 'spearmanr'.
+                This specifies the kind of test used for numerical data.
              - "variable_types": dict, for each group name (first level of the column index),
                 whether it is "numerical" or "categorical". 
                 This implies that all columns in a group must belong to the same type (numerical or categorical).
                 See examples.
+             - "n_jobs": int, the number of jobs for parallelism. See joblib.Parallel for details.
 
         Returns
         -------
@@ -477,7 +440,7 @@ class CrossSectionalAssociation(Association):
         """
         super().__init__(config)
 
-    def association(self,residuals_df:pd.DataFrame, variables_df:pd.DataFrame)->np.array:
+    def association(self, residuals_df: pd.DataFrame, variables_df: pd.DataFrame) -> np.ndarray:
         """
         Computes the association score between the residuals and candidate time series.
 
@@ -519,62 +482,67 @@ class CrossSectionalAssociation(Association):
         >>> asso.association(data[["target"]],data[["G1","G2"]])
         array([-0.05543262, -0.0992026 ])
         """
-        pvalues=dict()
-
         variable_types = self.config["variable_types"]
-        mass_with_numerical = self.config.get("mass_with_numerical",False)
-        if mass_with_numerical:
-            name_of_first_lag = self.config["name_of_first_lag"]
-
         col_names = variables_df.columns.get_level_values(0).unique()
-        #numerical
-        for variable in col_names:
-            if variable_types[variable] == "numerical":
-                lagged_df = variables_df[variable]
-                if mass_with_numerical and name_of_first_lag:  # use mass in case that the user knows that the data is lagged
-                    ts = lagged_df[[name_of_first_lag]].values 
-                    query = residuals_df.iloc[self.config["lags"]:].values
-                    correlations = mass2_modified(ts, query)
-                    ab = len(query)/2 - 1  # len(residuals) is the total sample size over which correlation is computed
-                    beta_distribution = beta(ab, ab, loc=-1, scale=2)
-                    pval = - 2 * beta_distribution.sf(np.abs(correlations))
-                    pvalues[variable] = pval
-                else:
-                    pval = []
-                    for lag in lagged_df.columns:
-                        p = pearsonr(lagged_df[lag],residuals_df[residuals_df.columns[0]])
-                        pval.append(p.pvalue)
-                    
-                    pvalues[variable] = np.array(pval)
+        n_jobs = self.config.get("n_jobs", -1)
 
-        #categorical
-        for variable in col_names:
-            if variable_types[variable] == "categorical":
-                pval = []
-                lagged_df = variables_df[variable]
-                for lag in lagged_df.columns:
-                    ncategories = sorted(lagged_df[lag].unique())
-                    if isinstance(residuals_df, pd.Series):
-                        samples = [residuals_df[lagged_df[lag]==k] for k in ncategories]
-                    else:
-                        samples = [residuals_df[residuals_df.columns[0]][lagged_df[lag]==k] for k in ncategories]
+        if len(np.unique(residuals_df.values.flatten()))==1:
+            group_pvalues = np.ones((len(col_names)),dtype=np.float16)
+            self.pvalues = {var:np.ones((len(variables_df[var].columns))) for var in col_names}
+        else:
+            results = Parallel(n_jobs=n_jobs)(delayed(self._compute_group_association)(residuals_df, variables_df[variable], variable_types[variable]) for variable in col_names)
+            group_pvalues = np.array([np.min(pvals) for pvals in results])
+            self.pvalues = {var:res for var,res in zip(col_names, results)}
+        return -group_pvalues
+    
+    def _compute_group_association(self, residuals_df: pd.DataFrame, group_df: pd.DataFrame, var_type: str) -> np.ndarray:
+        if var_type == "numerical":
+            pvals = self._numerical_group_pvalues(residuals_df, group_df)
+        elif var_type == "categorical":
+            pvals = self._categorical_group_pvalues(residuals_df, group_df)
+        else:
+            raise ValueError(f"Unknown variable type: {var_type}")
+        return pvals
 
-                    if len(samples)<2:
-                        pval.append(1) #constant value so independence
-                    else:
-                        if self.config["categorical_method"] == "f_oneway":
-                            pvalue = f_oneway(*samples).pvalue if len(samples)>1 else 1.  # if one sample only, no link.
-                        elif self.config["categorical_method"] == "kruskal":
-                            pvalue = kruskal(*samples).pvalue if len(samples)>1 else 1.
-                        elif self.config["categorical_method"] == "alexandergovern":
-                            pvalue = alexandergovern(*samples).pvalue if len(samples)>1 else 1.
-                        pval.append(pvalue)
-                pvalues[variable] = np.array(pval)
+    def _numerical_group_pvalues(self, residuals_df, group_df):
+        method = self.config.get("numerical_method","pearsonr")
+        pval = np.zeros((len(group_df.columns),))
+        for i,element in enumerate(group_df.columns):
+            if len(np.unique(group_df[element].values.flatten()))==1:
+                pval[i] = 1.
+            elif method == "pearsonr":
+                result = pearsonr(group_df[element], residuals_df[residuals_df.columns[0]])
+                pval[i] = result.pvalue if hasattr(result, 'pvalue') else result[1]
+            elif method == "spearmanr":
+                result = spearmanr(group_df[element], residuals_df[residuals_df.columns[0]])
+                pval[i] = result.pvalue if hasattr(result, 'pvalue') else result[1]
+            else:
+                raise ValueError(f"Unknown numerical_method: {method}. Must be one of 'pearsonr' or 'spearmanr'.")
 
-        self.pvalues = pvalues
-        pvalues = [pvalues[v] for v in col_names]
-        pvalues = [np.min(lagpval) for lagpval in pvalues] # take minimum of pvalues of each variable
-        return -np.array(pvalues)
+        return pval
+
+    def _categorical_group_pvalues(self, residuals_df, group_df):
+        method = self.config["categorical_method"]
+        pval = np.zeros((len(group_df.columns),))
+        for i,element in enumerate(group_df.columns):
+            ncategories = sorted(group_df[element].unique())
+            samples = [residuals_df[residuals_df.columns[0]][group_df[element] == k] for k in ncategories]
+            
+            if len(ncategories) == 1:
+                pval[i] = 1.
+            elif method == "f_oneway":
+                res = f_oneway(*samples)
+                pval[i] = res.pvalue if hasattr(res,'pvalue') else res[1]
+            elif method == "kruskal":
+                res = kruskal(*samples)
+                pval[i] = res.pvalue if hasattr(res,'pvalue') else res[1]
+            elif method == "alexandergovern":
+                res = alexandergovern(*samples)
+                pval[i] = res.pvalue if hasattr(res,'pvalue') else res[1]
+            else:
+                raise ValueError(f"Unknown categorical_method: {method}")
+
+        return pval
 
 
     
