@@ -17,13 +17,25 @@ from chronoepilogi.util_mass_ts import mass2_modified
 #
 ##
 
-class Association:
-    def __init__(self, config):
+
+import abc
+from typing import Any, Dict
+
+class Association(abc.ABC):
+    """
+    Base class for association measures in ChronoEpilogi.
+    """
+    def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.pvalues = dict()
 
-    def association(self, residuals_df, variable_df):
-        raise NotImplementedError()
+    @abc.abstractmethod
+    def association(self, residuals_df: pd.DataFrame, variable_df: pd.DataFrame) -> Any:
+        """
+        Computes the association measure between residuals and variables.
+        To be implemented by subclasses.
+        """
+        pass
 
 
 
