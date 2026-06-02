@@ -1,6 +1,6 @@
 # ChronoEpilogi: Scalable Time Series Selection with Multiple Markov Boundaries
 
-Code for the ChronoEpilogi algorithm and pypi package.
+Code for the ChronoEpilogi algorithm and pip installable package.
 
 ChronoEpilogi selects Markov Boundaries of a particular forecast TS, scalably and with provable guarantees. The structure of the uncovered Markov Boundary provides interpretability and explains the MTS generation process.
 
@@ -14,7 +14,7 @@ ChronoEpilogi selects Markov Boundaries of a particular forecast TS, scalably an
 
 # Documentation
 
-[Here](https://ev07.github.io/minimal_chronoepilogi/).
+[Here.](https://ev07.github.io/minimal_chronoepilogi/).
 
 # License
 
