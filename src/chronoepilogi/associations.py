@@ -1,4 +1,5 @@
-from scipy.stats import pearsonr,spearmanr, beta, rankdata, t, f_oneway, kruskal, alexandergovern
+from scipy.stats import pearsonr,spearmanr, beta, rankdata, f_oneway, kruskal, alexandergovern
+import scipy.stats
 from scipy.special import stdtr
 from statsmodels.regression.linear_model import OLS
 import pingouin
@@ -186,6 +187,16 @@ class PearsonMultivariate(Association):
         pvalues = 2 * beta_distribution.sf(np.abs(lagged_correlations))
         return pvalues
     
+    def _to_logpvalues(self, lagged_correlations, sample_size:int):
+        """
+        For the pearson r coefficient, compute the log-p-value using the beta distribution.
+        """
+        # next 3 lines taken from scipy.stats.pearsonr
+        ab = sample_size/2 - 1 
+        beta_distribution = beta(ab, ab, loc=-1, scale=2)
+        pvalues = 2 * beta_distribution.logsf(np.abs(lagged_correlations))
+        return pvalues
+    
     def _compute_ranks(self,residuals,variables):
         rr = rankdata(residuals)
         rv = rankdata(variables,axis=0)
@@ -198,7 +209,17 @@ class PearsonMultivariate(Association):
         # next lines taken from scipy.stats
         dof = sample_size - 2
         coefficients = lagged_coefficients * np.sqrt((dof/((lagged_coefficients+1.0)*(1.0-lagged_coefficients))).clip(0))
-        coefficients = stdtr(dof, -np.abs(coefficients))*2
+        coefficients = scipy.stats.t.sf(dof, np.abs(coefficients))*2
+        return coefficients
+
+    def _to_logpvalues_spearman(self,lagged_coefficients, sample_size):
+        """
+        For the spearman r coefficient, compute the log-p-value using the student distribution.
+        """
+        # next lines taken from scipy.stats
+        dof = sample_size - 2
+        coefficients = lagged_coefficients * np.sqrt((dof/((lagged_coefficients+1.0)*(1.0-lagged_coefficients))).clip(0))
+        coefficients = scipy.stats.t.logsf(dof, np.abs(coefficients))*2
         return coefficients
     
 
@@ -220,7 +241,7 @@ class PearsonMultivariate(Association):
             lagged_correlations = self._distribute_independence_tests(residuals, variables)
         else:
             lagged_correlations = self._apply_mass2(residuals, variables)
-        # transform to p-values
+        # transform to p-values or log-p-values
         if numerical_method == "spearmanr":
             pvalues = self._to_pvalues_spearman(lagged_correlations, residuals.shape[0])
         elif numerical_method == "pearsonr":

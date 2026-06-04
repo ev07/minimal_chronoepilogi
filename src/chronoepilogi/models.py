@@ -300,6 +300,7 @@ class ARDLModel(LearningModel):
         self.data = data
         self.model = self.createModel(data)
         self.results = self.model.fit(**self.config["fit"])
+        self.fitted = True
         
     def createModel(self, data):
         """
@@ -355,13 +356,16 @@ class ARDLModel(LearningModel):
             r_matrix = np.array(constraint_matrix)
             metric = self.results.wald_test(r_matrix, use_f=False, scalar=True).pvalue
         
-        elif method == "lr-test":
+        elif method in ["lr-test","log-lr-test"]:
             diff_dof = 0
             for i, param_name in enumerate(self.results.params.index):
                 if param_name not in previous_model.results.params.index:
                     diff_dof+=1
             cstat = -2*(previous_model.llh() - self.llh())
-            metric = chi2.sf(cstat,df=diff_dof)
+            if method == "lr-test":
+                metric = chi2.sf(cstat,df=diff_dof)
+            else:
+                metric = chi2.logsf(cstat,df=diff_dof)
         
         return metric
 
@@ -478,6 +482,7 @@ class LogitCrossSectional(LearningModel):
             self.results = self.model.fit_regularized(**self.config["fit_regularized"])
         else:
             raise ValueError("fit or fit_regularized must be in config")
+        self.fitted = True
 
     def fittedvalues(self, data=None):
         # return the fitted values of the model.
@@ -492,7 +497,7 @@ class LogitCrossSectional(LearningModel):
     def stopping_metric(self, previous_model, method):
         # should return a metric that corresponds more or less to p-values.
         # the lower, the more incentive to keep adding new variables to the selected set
-        if method == "lr-test":
+        if method in ["lr-test", "log-lr-test"]:
             diff_dof = 0
             for i, param_name in enumerate(self.results.params.index):
                 if param_name not in previous_model.results.params.index:
@@ -500,7 +505,10 @@ class LogitCrossSectional(LearningModel):
             llh_prev = previous_model.loglikelihood()
             llh_new = self.loglikelihood()
             cstat = -2 * (llh_prev - llh_new)
-            metric = chi2.sf(cstat, df=diff_dof)
+            if method == "lr-test":
+                metric = chi2.sf(cstat, df=diff_dof)
+            else:
+                metric = chi2.logsf(cstat, df=diff_dof)
         return metric
 
     def has_too_many_parameters(self, ratio):
@@ -563,6 +571,7 @@ class PoissonCrossSectional(LogitCrossSectional):
             self.results = self.model.fit(**self.config["fit"])
         else:
             self.results = self.model.fit_regularized(**self.config["fit_regularized"])
+        self.fitted = True
 
 class NegativeBinomialCrossSectional(LogitCrossSectional):
     def fit(self, data):
@@ -574,6 +583,7 @@ class NegativeBinomialCrossSectional(LogitCrossSectional):
             self.results = self.model.fit(**self.config["fit"])
         else:
             self.results = self.model.fit_regularized(**self.config["fit_regularized"])
+        self.fitted = True
 
 class OLSCrossSectional(LogitCrossSectional):
     def fit(self, data):
@@ -585,6 +595,7 @@ class OLSCrossSectional(LogitCrossSectional):
             self.results = self.model.fit(**self.config["fit"])
         else:
             self.results = self.model.fit_regularized(**self.config["fit_regularized"])
+        self.fitted = True
     
     def has_too_many_parameters(self, ratio):
         # part of the stopping criterion: verify if there are ratio times more timestamps in the data
@@ -637,6 +648,7 @@ class TemporalAdaptation(LogitCrossSectional):
         self.cross_sectional_instance.fit(data)
         self.model = self.cross_sectional_instance.model
         self.results = self.cross_sectional_instance.results
+        self.fitted = True
     
     def fittedvalues(self, data=None):
         if data is not None:

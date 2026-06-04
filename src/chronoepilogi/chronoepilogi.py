@@ -856,8 +856,11 @@ class ChronoEpilogi():
 
         # build candidate set
         candidate_variables = set(self.data.columns.get_level_values(0).unique())
-        if not self.data_format_is_level_1:
-            candidate_variables.remove(self.target[0])
+        if not self.start_with_univariate_autoregressive_model:
+            if self.data_format_is_level_1:
+                candidate_variables.remove(self.target)
+            else:
+                candidate_variables.remove(self.target[0])
         for variable in self.selected_set:
             candidate_variables.remove(variable)
         
