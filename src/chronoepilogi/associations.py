@@ -731,7 +731,7 @@ class HeuristicPartialCorrelation(LinearPartialCorrelation):
         # using a student T distribution
         dof = n - k - 2
         tval = r * np.sqrt(dof / (1 - r**2 + 1e-16))  # in case 1-r**2==0
-        pval = 2 * t.sf(np.abs(tval), dof)
+        pval = 2 * scipy.stats.t.sf(np.abs(tval), dof)
         return pval
 
     def partial_corr_mass(self,residuals_df, candidate_df, condition_df):
