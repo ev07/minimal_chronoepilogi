@@ -42,8 +42,8 @@ class ChronoEpilogi():
                  default_k:int = 1,
                  default_max_lag:int = 1,
                  variable_types:None|dict = None,
-                 # less important parameters
-                 backward_removal_strategy:str = "first",
+                 # less important parameterss
+                 backward_removal_strategy:str = "max",
                  valid_obs_param_ratio:float = 0., # legacy
                  ) -> None:
         """Initialize ChronoEpilogi.
@@ -843,7 +843,7 @@ class ChronoEpilogi():
                     if max_metric >= threshold:  # there is no significative difference between the models.
                         self.selected_set.remove(max_column)
                         selected_set_has_changed = True  # set change flag to true
-                    break
+                        break
                     
             if self.backward_removal_strategy == "max":
                 if max_metric >= threshold:  # there is no significative difference between the models.
