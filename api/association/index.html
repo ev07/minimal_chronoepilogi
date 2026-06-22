@@ -820,8 +820,11 @@ For categorical data, we use an ANOVA test between the residuals and the tested 
  - "lags": int, the number of lags to compute the correlation over
  - "categorical_method": str, any of 'f_oneway', 'kruskal', 'alexandergovern'.
     This specifies the kind of test used for categorical data.
+ - "numerical_method": str, any of 'pearsonr', 'spearmanr'.
  - "variable_types": dict, for each variable name, whether it is "numerical" or "categorical".
-    See examples.</p>
+    See examples.
+ - "n_jobs": int, the number of processors used in parallel. Must be different from 0. See joblib.Parallel for more information.
+ - "check_na": bool, if True, checks that there is no NaN in the variables and residuals DataFrames.</p>
               </div>
             </td>
             <td>
@@ -1075,10 +1078,13 @@ For categorical data, we use an ANOVA test between the residuals and the tested 
                 <p>Must contain an entry for:
  - "categorical_method": str, any of 'f_oneway', 'kruskal', 'alexandergovern'.
     This specifies the kind of test used for categorical data.
+ - "numerical_method": str, any of 'pearsonr', 'spearmanr'.
+    This specifies the kind of test used for numerical data.
  - "variable_types": dict, for each group name (first level of the column index),
     whether it is "numerical" or "categorical". 
     This implies that all columns in a group must belong to the same type (numerical or categorical).
-    See examples.</p>
+    See examples.
+ - "n_jobs": int, the number of jobs for parallelism. See joblib.Parallel for details.</p>
               </div>
             </td>
             <td>
@@ -1136,7 +1142,7 @@ For categorical data, we use an ANOVA test between the residuals and the tested 
 
 
 <h2 id="chronoepilogi.associations.CrossSectionalAssociation.association" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">association</span><span class="p">(</span><span class="n">residuals_df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">variables_df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span></code>
+            <code class="highlight language-python"><span class="n">association</span><span class="p">(</span><span class="n">residuals_df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">variables_df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span></code>
 
 </h2>
 
