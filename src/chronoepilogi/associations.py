@@ -42,9 +42,15 @@ class Association(abc.ABC):
 
 
 
-class PearsonMultivariate(Association):
+class LaggedAssociationBase(Association):
     """
-    Pearson Correlation for numerical data.
+    Shared machinery for lagged (temporal) independence tests between a single
+    residual series and multiple candidate time series.
+
+    Subclasses only need to implement `_apply_independence_tests` (the raw
+    per-lag test statistic for each variable - a correlation coefficient for
+    continuous data, or directly a p-value for a group-difference test such
+    as ANOVA) and `association` (the orchestration returning -p-values).
 
     Notes
     -----
@@ -54,16 +60,13 @@ class PearsonMultivariate(Association):
     The dataframe that contains the variables must begin at or before the first non-nan value of the residuals.
     The dataframe that contains the variables must end at or before the residuals end.
     The lags parameter of the configuration must be less than the length of the variables index.
-
     """
 
-    #!TODO have an option to directly get log-pvalues in case it is useful.
-    #!TODO replace the pandas manipulations by a higher level data class. This will be hard though.
     def _cpus_from_njobs(self, n_jobs):
         """
         Gets the number of available cpu to configure the parallelism.
         """
-        if n_jobs<0: return cpu_count()+1-n_jobs
+        if n_jobs<0: return cpu_count()+1+n_jobs
         if n_jobs>0: return n_jobs
         raise ValueError("n_jobs cannot be equal to 0 (see joblib documentation).")
 
@@ -90,13 +93,13 @@ class PearsonMultivariate(Association):
         if residuals_df.index[0] not in variables_df.index:
             raise IndexError("The first index of residuals_df ({}) is not in variables_df.index.".format(residuals_df.index[0]))
         if variables_df.index[-1] not in residuals_df.index:
-            raise IndexError("The last index of variables_df ({}) is not in residuals_df.index.".format(variables_df.index[0]))
+            raise IndexError("The last index of variables_df ({}) is not in residuals_df.index.".format(variables_df.index[-1]))
         if lags>=len(variables_df):
             raise ValueError("The lag parameter is {}, but the variables only have {} observations.".format(lags,len(variables_df)))
         if variables_df.index.get_loc(residuals_df.index[0]) < lags:
             if variables_df.index[lags] not in residuals_df.index:
                 raise IndexError("Index {} should be in residuals_df.index, but is missing".format(variables_df.index[lags]))
-        
+
 
     def _select_correct_rows(self, residuals_df:pd.DataFrame, variables_df:pd.DataFrame):
         """
@@ -109,7 +112,7 @@ class PearsonMultivariate(Association):
          - variables[t3-lags:t2], residuals[t3:t2] if t3>=t1+lags
         """
         lags = self.config["lags"]
-        
+
         ## select residuals and variables so that variables starts lags step before resid.
         first_iloc = variables_df.index.get_loc(residuals_df.index[0])
         if first_iloc >= lags:
@@ -129,11 +132,41 @@ class PearsonMultivariate(Association):
 
     def _handle_constant_residuals(self, variables):
         """
-        Return a matrix of zero correlations.
+        Return a p-value of 1 for every variable and lag: a constant residual
+        cannot be associated with anything.
         """
         lags = self.config["lags"]
-        return np.zeros((variables.shape[1],lags))
-    
+        return np.ones((variables.shape[1],lags))
+
+    def _distribute_independence_tests(self, residuals, variables):
+        """
+        Handle the parallelization of the independence test computation according to the n_jobs parameter.
+        """
+        n_jobs = self.config.get("n_jobs", -1)
+        cpus_available = self._cpus_from_njobs(n_jobs)
+        column_split = np.array_split(list(range(variables.shape[1])),min(variables.shape[1],cpus_available))
+        res = Parallel(n_jobs=n_jobs)(delayed(self._apply_independence_tests)(residuals, variables[:,list(cols)]) for cols in column_split)
+        lagged_results = np.concatenate(list(res), axis=0)
+        return lagged_results
+
+    @abc.abstractmethod
+    def _apply_independence_tests(self, residuals, variables):
+        """
+        Compute the raw per-lag test statistic for each variable: a correlation
+        coefficient for continuous data, or directly a p-value for a
+        group-difference test. To be implemented by subclasses.
+        """
+        pass
+
+
+class PearsonMultivariate(LaggedAssociationBase):
+    """
+    Pearson Correlation for numerical data.
+    """
+
+    #!TODO have an option to directly get log-pvalues in case it is useful.
+    #!TODO replace the pandas manipulations by a higher level data class. This will be hard though.
+
     def _is_pearsonr_faster(self, residuals_shape, variables_shape):
         """
         Chooses whether to use standard correlation or fft-accelerated correlation.
@@ -142,17 +175,6 @@ class PearsonMultivariate(Association):
         #!TODO make a better choice of the fastest process between the fft and the pearsonr depending on T and lags.
         return lags == 1
 
-    def _distribute_independence_tests(self, residuals, variables):
-        """
-        Handle the parallelization of the correlation computation according to the n_jobs parameter.
-        """
-        n_jobs = self.config.get("n_jobs", -1)
-        cpus_available = self._cpus_from_njobs(n_jobs)
-        column_split = np.array_split(list(range(variables.shape[1])),min(variables.shape[1],cpus_available))
-        res = Parallel(n_jobs=n_jobs)(delayed(lambda x,y:self._apply_independence_tests(x,y))(residuals, variables[:,list(cols)]) for cols in column_split)
-        lagged_correlations = np.concatenate(list(res), axis=0)
-        return lagged_correlations
-    
     def _apply_independence_tests(self, residuals, variables):
         """
         Compute the correlations without using fft acceleration.
@@ -164,8 +186,8 @@ class PearsonMultivariate(Association):
                         for i in range(variables.shape[1])]  # constant data verification is done here.
         lagged_correlations = np.array(lagged_correlations)
         return lagged_correlations
-        
-    
+
+
     def _apply_mass2(self, residuals, variables):
         """
         Parallelizes the computation of the correlation with fft acceleration.
@@ -209,7 +231,7 @@ class PearsonMultivariate(Association):
         # next lines taken from scipy.stats
         dof = sample_size - 2
         coefficients = lagged_coefficients * np.sqrt((dof/((lagged_coefficients+1.0)*(1.0-lagged_coefficients))).clip(0))
-        coefficients = scipy.stats.t.sf(dof, np.abs(coefficients))*2
+        coefficients = scipy.stats.t.sf(np.abs(coefficients), dof)*2
         return coefficients
 
     def _to_logpvalues_spearman(self,lagged_coefficients, sample_size):
@@ -219,12 +241,14 @@ class PearsonMultivariate(Association):
         # next lines taken from scipy.stats
         dof = sample_size - 2
         coefficients = lagged_coefficients * np.sqrt((dof/((lagged_coefficients+1.0)*(1.0-lagged_coefficients))).clip(0))
-        coefficients = scipy.stats.t.logsf(dof, np.abs(coefficients))*2
+        coefficients = scipy.stats.t.logsf(np.abs(coefficients), dof)*2
         return coefficients
     
 
     def association(self, residuals_df, variables_df):
         numerical_method = self.config.get("numerical_method","pearsonr")
+        if numerical_method not in ("pearsonr", "spearmanr"):
+            raise ValueError(f"Unknown numerical_method: {numerical_method}. Must be one of 'pearsonr' and 'spearmanr'.")
 
         residuals_df = self._remove_first_missings_from_residuals(residuals_df)
         self._check_inputs(residuals_df, variables_df)
@@ -233,32 +257,30 @@ class PearsonMultivariate(Association):
         if numerical_method == "spearmanr":
             residuals, variables = self._compute_ranks(residuals,variables)
 
-        # constant residuals
+        # constant residuals: no variable can be associated with them.
         if len(np.unique(residuals))==1:
-            lagged_correlations = self._handle_constant_residuals(variables)
-        # pearsonr would be faster as there are too few lags for the fft to be worth it
-        elif self._is_pearsonr_faster(residuals.shape, variables.shape):
-            lagged_correlations = self._distribute_independence_tests(residuals, variables)
+            pvalues = self._handle_constant_residuals(variables)
         else:
-            lagged_correlations = self._apply_mass2(residuals, variables)
-        # transform to p-values or log-p-values
-        if numerical_method == "spearmanr":
-            pvalues = self._to_pvalues_spearman(lagged_correlations, residuals.shape[0])
-        elif numerical_method == "pearsonr":
-            pvalues = self._to_pvalues(lagged_correlations, residuals.shape[0])
-        else:
-            raise ValueError(f"Unknown categorical_method: {numerical_method}. Must be one of 'pearsonr' and 'spearmanr'.")
+            # pearsonr would be faster as there are too few lags for the fft to be worth it
+            if self._is_pearsonr_faster(residuals.shape, variables.shape):
+                lagged_correlations = self._distribute_independence_tests(residuals, variables)
+            else:
+                lagged_correlations = self._apply_mass2(residuals, variables)
+            # transform to p-values
+            if numerical_method == "spearmanr":
+                pvalues = self._to_pvalues_spearman(lagged_correlations, residuals.shape[0])
+            else:
+                pvalues = self._to_pvalues(lagged_correlations, residuals.shape[0])
+
         self.pvalues = dict((variable, pvalues[i])for i,variable in enumerate(variables_df.columns))
-        
         return np.max(-pvalues, axis=-1)
 
-    
 
-class ANOVATemporalSlow(PearsonMultivariate):
+class ANOVATemporalSlow(LaggedAssociationBase):
     """
     Independence test for numerical residuals and categorical variables.
     """
-    #!TODO vectorize as much as possible _distributed_pearsonr
+    #!TODO vectorize as much as possible _apply_independence_tests
 
     def _apply_independence_tests(self, residuals, variables):
         lags = self.config.get("lags", 1)
@@ -291,13 +313,13 @@ class ANOVATemporalSlow(PearsonMultivariate):
         self._check_inputs(residuals_df, variables_df)
         residuals, variables = self._select_correct_rows(residuals_df, variables_df)
 
-        # constant residuals
+        # constant residuals: no variable can be associated with them.
         if len(np.unique(residuals))==1:
-            pvalues = self._handle_constant_residuals(variables)+1
+            pvalues = self._handle_constant_residuals(variables)
         else:
             pvalues = self._distribute_independence_tests(residuals, variables)
         self.pvalues = dict((variable, pvalues[i])for i,variable in enumerate(variables_df.columns))
-        
+
         return np.max(-pvalues, axis=-1)
 
 
@@ -418,6 +440,8 @@ class TemporalSlowAssociation(Association):
             elif variable_types[variable] == "categorical":
                 pvalues.append(categorical_pvalues[index_cat])
                 index_cat+=1
+            else:
+                raise ValueError(f"Unknown variable type '{variable_types[variable]}' for variable '{variable}'. Must be 'numerical' or 'categorical'.")
 
         self.pvalues = {**pearson_obj.pvalues, **anova_obj.pvalues}
         return np.array(pvalues)
