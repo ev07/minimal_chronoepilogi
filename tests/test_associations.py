@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.testing as npt
 import pandas as pd
+import pytest
+from joblib import cpu_count
 
 from chronoepilogi import associations
 
@@ -288,3 +290,174 @@ def test_crosssectional_mixed_spearman():
    result = asso.association(pd.DataFrame(data[["target"]]), pd.DataFrame(data[["G1","G2"]]))
    print(result)
    assert not np.any(np.isnan(result))
+
+
+#########################################################################################
+#                                                                                       #
+#                                  AI GENERATED TESTS                                   #
+#                                                                                       #
+#########################################################################################
+
+#####################################################
+#                                                   #
+#            LaggedAssociationBase tests            #
+#                                                   #
+#####################################################
+
+# A. ABC enforcement
+
+def test_laggedassociationbase_cannot_be_instantiated_directly():
+    with pytest.raises(TypeError):
+        associations.LaggedAssociationBase({"lags": 1})
+
+def test_laggedassociationbase_subclass_without_apply_independence_tests_cannot_instantiate():
+    class IncompleteAssociation(associations.LaggedAssociationBase):
+        def association(self, residuals_df, variables_df):
+            pass
+    with pytest.raises(TypeError):
+        IncompleteAssociation({"lags": 1})
+
+def test_apply_independence_tests_is_abstract_on_base():
+    method = associations.LaggedAssociationBase._apply_independence_tests
+    assert getattr(method, "__isabstractmethod__", False)
+
+# B. _cpus_from_njobs
+
+def test_cpus_from_njobs_positive():
+    asso = associations.PearsonMultivariate({"lags": 1})
+    assert asso._cpus_from_njobs(3) == 3
+
+def test_cpus_from_njobs_negative_all():
+    asso = associations.PearsonMultivariate({"lags": 1})
+    assert asso._cpus_from_njobs(-1) == cpu_count()
+
+def test_cpus_from_njobs_negative_all_but_one():
+    asso = associations.PearsonMultivariate({"lags": 1})
+    assert asso._cpus_from_njobs(-2) == cpu_count() - 1
+
+def test_cpus_from_njobs_zero_raises():
+    asso = associations.PearsonMultivariate({"lags": 1})
+    with pytest.raises(ValueError):
+        asso._cpus_from_njobs(0)
+
+# C. _check_inputs
+
+def test_check_inputs_multi_column_residuals_raises():
+    data, variable_types = _make_temporal_numerical_data()
+    asso = associations.PearsonMultivariate({"lags":1,"variable_types":variable_types})
+    with pytest.raises(ValueError):
+        asso._check_inputs(data[["target","1"]], data[["2"]])
+
+def test_check_inputs_first_residual_index_missing_raises():
+    data, variable_types = _make_temporal_numerical_data()
+    asso = associations.PearsonMultivariate({"lags":1,"variable_types":variable_types})
+    residuals = data[["target"]].iloc[5:]
+    variables = data[["1"]].iloc[10:]
+    with pytest.raises(IndexError):
+        asso._check_inputs(residuals, variables)
+
+def test_check_inputs_last_variable_index_missing_raises():
+    data, variable_types = _make_temporal_numerical_data()
+    asso = associations.PearsonMultivariate({"lags":1,"variable_types":variable_types})
+    residuals = data[["target"]].iloc[:10]
+    variables = data[["1"]].iloc[:20]
+    with pytest.raises(IndexError) as excinfo:
+        asso._check_inputs(residuals, variables)
+    # regression guard: the message must name the *last* index of variables_df (19),
+    # not its first index (0), which was the pre-fix bug.
+    assert str(variables.index[-1]) in str(excinfo.value)
+
+def test_check_inputs_lags_exceeds_variables_length_raises():
+    data, variable_types = _make_temporal_numerical_data()
+    residuals = data[["target"]].iloc[:5]
+    variables = data[["1"]].iloc[:5]
+    asso = associations.PearsonMultivariate({"lags":10,"variable_types":variable_types})
+    with pytest.raises(ValueError):
+        asso._check_inputs(residuals, variables)
+
+def test_check_inputs_check_na_residuals_raises():
+    data, variable_types = _make_temporal_numerical_data()
+    residuals = data[["target"]].iloc[:10].copy()
+    residuals.iloc[5,0] = np.nan
+    variables = data[["1"]].iloc[:10]
+    asso = associations.PearsonMultivariate({"lags":1,"variable_types":variable_types,"check_na":True})
+    with pytest.raises(ValueError):
+        asso._check_inputs(residuals, variables)
+
+def test_check_inputs_check_na_variables_raises():
+    data, variable_types = _make_temporal_numerical_data()
+    residuals = data[["target"]].iloc[:10]
+    variables = data[["1"]].iloc[:10].copy()
+    variables.iloc[5,0] = np.nan
+    asso = associations.PearsonMultivariate({"lags":1,"variable_types":variable_types,"check_na":True})
+    with pytest.raises(ValueError):
+        asso._check_inputs(residuals, variables)
+
+def test_check_inputs_check_na_false_by_default_allows_nan():
+    data, variable_types = _make_temporal_numerical_data()
+    residuals = data[["target"]].iloc[:10].copy()
+    residuals.iloc[5,0] = np.nan
+    variables = data[["1"]].iloc[:10]
+    asso = associations.PearsonMultivariate({"lags":1,"variable_types":variable_types})
+    asso._check_inputs(residuals, variables)  # must not raise
+
+# D. _handle_constant_residuals
+
+def test_handle_constant_residuals_returns_ones():
+    data, variable_types = _make_temporal_numerical_data()
+    asso = associations.PearsonMultivariate({"lags":3,"variable_types":variable_types})
+    variables = data[["1","2"]].to_numpy()
+    result = asso._handle_constant_residuals(variables)
+    assert result.shape == (2,3)
+    npt.assert_array_equal(result, np.ones((2,3)))
+
+def test_handle_constant_residuals_shared_between_subclasses():
+    data, variable_types = _make_temporal_mixed_data()
+    config = {"lags":4,"categorical_method":"f_oneway","variable_types":variable_types}
+    pearson_asso = associations.PearsonMultivariate(config)
+    anova_asso = associations.ANOVATemporalSlow(config)
+    variables = data[["1","2"]].to_numpy()
+    npt.assert_array_equal(
+        pearson_asso._handle_constant_residuals(variables),
+        anova_asso._handle_constant_residuals(variables),
+    )
+
+# E. _select_correct_rows
+
+def test_select_correct_rows_residuals_start_within_lag_window():
+    # t3 < t1 + lags: variables index 0..19, residuals index 2..19, lags=5
+    lags = 5
+    variables_df = pd.DataFrame({"v": np.arange(20)}, index=range(20))
+    residuals_df = pd.DataFrame({"r": 1000 + np.arange(2, 20)}, index=range(2, 20))
+    asso = associations.PearsonMultivariate({"lags": lags, "variable_types": {"v": "numerical"}})
+    residuals, variables = asso._select_correct_rows(residuals_df, variables_df)
+    npt.assert_array_equal(residuals, 1000 + np.arange(5, 20))
+    npt.assert_array_equal(variables.flatten(), np.arange(0, 20))
+
+def test_select_correct_rows_residuals_start_after_lag_window():
+    # t3 >= t1 + lags: variables index 0..19, residuals index 8..19, lags=5
+    lags = 5
+    variables_df = pd.DataFrame({"v": np.arange(20)}, index=range(20))
+    residuals_df = pd.DataFrame({"r": 1000 + np.arange(8, 20)}, index=range(8, 20))
+    asso = associations.PearsonMultivariate({"lags": lags, "variable_types": {"v": "numerical"}})
+    residuals, variables = asso._select_correct_rows(residuals_df, variables_df)
+    npt.assert_array_equal(residuals, 1000 + np.arange(8, 20))
+    npt.assert_array_equal(variables.flatten(), np.arange(3, 20))
+
+# F. _distribute_independence_tests
+
+def test_distribute_independence_tests_matches_serial_apply():
+    data, variable_types = _make_temporal_numerical_data()
+    lags = 4
+    residuals_df = data[["target"]]
+    variables_df = data[["1","2","3","4"]]
+
+    base_config = {"lags": lags, "variable_types": variable_types}
+    reference_asso = associations.PearsonMultivariate({**base_config, "n_jobs": 1})
+    residuals, variables = reference_asso._select_correct_rows(residuals_df, variables_df)
+    expected = reference_asso._apply_independence_tests(residuals, variables)
+
+    for n_jobs in (1, -1, 2):
+        asso = associations.PearsonMultivariate({**base_config, "n_jobs": n_jobs})
+        result = asso._distribute_independence_tests(residuals, variables)
+        npt.assert_allclose(result, expected, atol=1e-8)
