@@ -4,3 +4,4 @@
 /.pytest_cache/
 /dist/
 __pycache__/
+src/chronoepilogi/_version.py

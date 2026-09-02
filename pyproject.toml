@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "chronoepilogi"
-version = "0.0.3"
+dynamic = ["version"]
 description = "Scalable Time Series Selection with Multiple Solutions"
 keywords = ["feature selection", "time series selection", "multivariate time series", "MTS", "MTS forecasting", "Markov Boundary", "multiple Markov Boundaries"]
 license = {text = "Apache-2.0"}
@@ -45,11 +45,23 @@ dependencies = [
 
 [project.optional-dependencies]
 pdm = []
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mike"
+]
 
 
 [project.urls]
 Documentation = "https://ev07.github.io/minimal_chronoepilogi/"
 "Source code" = "https://github.com/ev07/minimal_chronoepilogi/tree/main"
 
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/chronoepilogi/_version.py"
 
 [tool]
