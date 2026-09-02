@@ -731,6 +731,8 @@
 
 <a id="chronoepilogi.models.LearningModel"></a>
     <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="abc.ABC">ABC</span></code></p>
 
 
 
@@ -770,7 +772,7 @@ See data format documentation for precisions.</p>
 
 
 <h2 id="chronoepilogi.models.LearningModel.__init__" class="doc doc-heading">
-            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">target</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
 
 </h2>
 
@@ -796,7 +798,7 @@ See data format documentation for precisions.</p>
                 <code>config</code>
             </td>
             <td>
-                  <code><span title="dict">dict</span></code>
+                  <code><span title="typing.Dict">Dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -860,6 +862,10 @@ As a string for single level dataframe, a tuple of strings for two-levels datafr
 
 <h2 id="chronoepilogi.models.LearningModel.fit" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
 
 </h2>
 
@@ -940,7 +946,11 @@ The method MUST save the data used to train the model in self.data.</p>
 
 
 <h2 id="chronoepilogi.models.LearningModel.fittedvalues" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">fittedvalues</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="kc">None</span> <span class="o">|</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span></code>
+            <code class="highlight language-python"><span class="n">fittedvalues</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
 
 </h2>
 
@@ -966,7 +976,7 @@ The method MUST save the data used to train the model in self.data.</p>
                 <code>data</code>
             </td>
             <td>
-                  <code>None | <span title="pandas.DataFrame">DataFrame</span></code>
+                  <code><span title="typing.Optional">Optional</span>[<span title="pandas.DataFrame">DataFrame</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -1019,6 +1029,10 @@ If None is passed, the training data should be used to compute the predictions.<
 
 <h2 id="chronoepilogi.models.LearningModel.has_too_many_parameters" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">has_too_many_parameters</span><span class="p">(</span><span class="n">ratio</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
 
 </h2>
 
@@ -1097,7 +1111,7 @@ May return False constantly if this is no concern for the present model.</p>
 
 
 <h2 id="chronoepilogi.models.LearningModel.residuals" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">residuals</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="kc">None</span> <span class="o">|</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span></code>
+            <code class="highlight language-python"><span class="n">residuals</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span></code>
 
 </h2>
 
@@ -1123,7 +1137,7 @@ May return False constantly if this is no concern for the present model.</p>
                 <code>data</code>
             </td>
             <td>
-                  <code>None | <span title="pandas.DataFrame">DataFrame</span></code>
+                  <code><span title="typing.Optional">Optional</span>[<span title="pandas.DataFrame">DataFrame</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -1199,6 +1213,10 @@ The index must correspond to the index of the fitted values.</p>
 
 <h2 id="chronoepilogi.models.LearningModel.stopping_metric" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">stopping_metric</span><span class="p">(</span><span class="n">previous_model</span><span class="p">:</span> <span class="n">LearningModel</span><span class="p">,</span> <span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
 
 </h2>
 
