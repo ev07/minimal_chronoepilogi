@@ -8,7 +8,7 @@ hide:
 
 
 ## TemporalSlowHk
-:::chronoepilogi.associations.TemporalSlowHk
+:::chronoepilogi.partial.TemporalSlowHk
 
 ## CrossSectionalHk
-:::chronoepilogi.associations.CrossSectionalHk
+:::chronoepilogi.partial.CrossSectionalHk
