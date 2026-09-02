@@ -18,6 +18,7 @@ nav:
     - Association: api\\association.md
     - Partial Correlation: api\\partial_correlation.md
 plugins:
+  - mike
   - mkdocstrings:
       handlers:
         python:
