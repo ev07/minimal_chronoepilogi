@@ -2,13 +2,12 @@ import numpy as np
 import pandas as pd
 import deepdiff.diff
 from collections import defaultdict
-from typing import List
 
-from chronoepilogi.associations import ModelBasedPartialCorrelation, CrossSectionalH0
+from chronoepilogi.partial import TemporalLinearRIT, CrossSectionalLinearRIT
 
 
 from chronoepilogi.associations import TemporalSlowAssociation, CrossSectionalAssociation, Association
-from chronoepilogi.associations import TemporalSlowHk, CrossSectionalHk, PartialCorrelation
+from chronoepilogi.partial import TemporalSlowHk, CrossSectionalHk, LagPairsResidCITest
 
 from chronoepilogi.models import ARDLModel, TemporalAdaptation, LearningModel
 from chronoepilogi.models import OLSCrossSectional, PoissonCrossSectional, LogitCrossSectional
@@ -29,11 +28,11 @@ class ChronoEpilogi():
                  equivalence_heuristic:str = "parcorr",
                  maximal_selected_size:float = np.inf,
                  # module settings
-                 model_class:None|LearningModel = None,
+                 model_class:None|type[LearningModel] = None,
                  model_config:None|dict = None,
-                 association_class:None|Association = None,
+                 association_class:None|type[Association] = None,
                  association_config:None|dict = None,
-                 partial_correlation_class:None|PartialCorrelation = None,
+                 partial_correlation_class:None|type[LagPairsResidCITest] = None,
                  partial_correlation_config:None|dict = None,
                  # information needed to set default modules
                  start_with_univariate_autoregressive_model:bool|str = "infer",
@@ -95,22 +94,22 @@ class ChronoEpilogi():
 
         Other Parameters
         ----------------
-        model_class: None | LearningModel, optional
+        model_class: None | type[LearningModel], optional
             The user may provide a custom model inheriting from LearningModel, suited to the specific task and data.
             When left to None, a default model is infered using arguments target_type, start_with_univariate_autoregressive_model, and default_max_lag.
             It is recommanded to pass explicitely a model class and its arguments.
         model_config: None | dict, optional
             Configuration parameter dictionary to pass to the model class.
             If model_class is None, model_config will be infered similarily.
-        association_class: None | Association, optional
+        association_class: None | type[Association], optional
             The user may provide a custom association inheriting from Association, suited to the specific task and data.
             When left to None, a default association is infered.
             It is recommanded to pass explicitely an association class and its arguments.
         association_config: None | dict, optional
             Configuration parameter dictionary to pass to the association class.
             If association_class is None, association_config will be infered depending on default_max_lag.
-        partial_correlation_class: None | PartialCorrelation, optional
-            The user may provide a custom association inheriting from PartialCorrelation, suited to the specific task and data.
+        partial_correlation_class: None | type[LagPairsResidCITest], optional
+            The user may provide a custom association inheriting from LagPairsResidCITest, suited to the specific task and data.
             When left to None, a default partial correlation is infered.
             It is recommanded to pass explicitely an partial correlation class and its arguments.
         partial_correlation_config: None | dict, optional
@@ -193,26 +192,42 @@ class ChronoEpilogi():
         self.partial_correlation_class = partial_correlation_class
         self.partial_correlation_config = partial_correlation_config
 
-        self._check_config()
+        # remember the raw constructor arguments (None means "auto-infer"):
+        # self.model_class/association_class/partial_correlation_class above get
+        # overwritten with a concrete, never-None class by _prebuild_objects, so
+        # without this, a later call (e.g. after a data update) could not tell
+        # whether a class was auto-inferred or explicitly provided, and so could
+        # not correctly re-infer it if the data shape changes.
+        self._model_class_arg = model_class
+        self._model_config_arg = model_config
+        self._association_class_arg = association_class
+        self._association_config_arg = association_config
+        self._partial_correlation_class_arg = partial_correlation_class
+        self._partial_correlation_config_arg = partial_correlation_config
+        # same reasoning as above: self.start_with_univariate_autoregressive_model
+        # gets resolved from "infer" to a concrete True/False below, so this is
+        # needed to re-resolve it correctly if the data shape changes later.
+        self._start_with_univariate_autoregressive_model_arg = start_with_univariate_autoregressive_model
 
-        self._prebuild_objects(model_class, model_config, 
-                               association_class, association_config, 
+        self._check_config()
+        self._infer_defaults()
+
+        self._prebuild_objects(model_class, model_config,
+                               association_class, association_config,
                                partial_correlation_class, partial_correlation_config)
-        
+
         # storing runs
-        self.selected_set = None
         self.equivalent_variables = None
-        self.computed_full_tests = dict()
-        self.computed_Hk_partial_tests = dict()
-        self.computed_resid_tests = dict()
-        self.computed_residuals = dict()
-        self.computed_associations = dict()
-        self.computed_models = dict()
+        self._reset_computed_caches()
 
 
         
         
     def _check_config(self):
+        """
+        Validate the explicit configuration values. Raises on invalid input.
+        Does not derive or mutate any setting; see _infer_defaults for that.
+        """
         if self.phases not in ["F","FB","Fg","FgV","FBG","FBGV","FBE","FBEV"]:
             raise ValueError("Invalid value for argument phases.")
         if not isinstance(self.equivalence_early_stopping,bool):
@@ -223,9 +238,23 @@ class ChronoEpilogi():
             raise ValueError("Argument equivalence_heuristic expects either 'parcorr', 'resid' or 'exact'.")
         if self.start_with_univariate_autoregressive_model not in ["infer", True, False]:
             raise ValueError("Expected string 'infer' or boolean for argument start_with_univariate_autoregressive_model.")
+        if self._start_with_univariate_autoregressive_model_arg is True:
+            data_is_two_level = isinstance(self.data.columns, pd.MultiIndex) and self.data.columns.nlevels>1
+            if data_is_two_level:
+                raise ValueError(
+                    "start_with_univariate_autoregressive_model cannot be True when data has a "
+                    "two-level column index; use 'infer' or False instead."
+                )
         if self.backward_removal_strategy not in ["first","max"]:
             raise ValueError("Argument backward_removal_strategy expects either 'first' or 'max'.")
-        
+
+    def _infer_defaults(self):
+        """
+        Derives implicit settings from the (already validated) configuration:
+        the dataframe's column-index level, the resolved value of "infer" for
+        start_with_univariate_autoregressive_model, the default model_test_method,
+        and a completed variable_types mapping.
+        """
         # level of the dataframe columns
         if not isinstance(self.data.columns, pd.MultiIndex) or self.data.columns.nlevels==1:
             self.data_format_is_level_1 = True
@@ -233,21 +262,24 @@ class ChronoEpilogi():
             self.data_format_is_level_1 = False
 
         # autoregressive model only if the DataFrame column index has one level.
-        if self.start_with_univariate_autoregressive_model == "infer":
+        if self._start_with_univariate_autoregressive_model_arg == "infer":
             if self.data_format_is_level_1:
                 self.start_with_univariate_autoregressive_model = True
             else:
                 self.start_with_univariate_autoregressive_model = False
-        
+        else:
+            self.start_with_univariate_autoregressive_model = self._start_with_univariate_autoregressive_model_arg
+
         # check if the model test is set. If model_class is also None, set to "lr-test".
         if self.model_test_method is None:
             if self.model_class is None:
                 self.model_test_method = "lr-test"
 
-        # in the case of either association_class or partial_correlation_class being None,
+        # in the case of either association_class or partial_correlation_class being None
+        # (i.e. auto-inferred rather than explicitly provided by the caller),
         # we must create or complete a variable_types dictionary
         # variables of unknown types will be considered numerical
-        if (self.association_class is None) or (self.partial_correlation_class is None):
+        if (self._association_class_arg is None) or (self._partial_correlation_class_arg is None):
             if self.variable_types is None:
                 self.variable_types = defaultdict(lambda:"numerical")
             else:
@@ -341,29 +373,47 @@ class ChronoEpilogi():
         
         # choose H0 object
         if self.data_format_is_level_1:
-            self.H0_partial_correlation_class = ModelBasedPartialCorrelation
-            self.H0_partial_correlation_config = {"lags":self.default_max_lag,"large_sample":False}
+            self.resid_ind_test_class = TemporalLinearRIT
+            self.resid_ind_test_config = {"lags":self.default_max_lag}
         else:
-            self.H0_partial_correlation_class = CrossSectionalH0
-            self.H0_partial_correlation_config = {"large_sample":False}
+            self.resid_ind_test_class = CrossSectionalLinearRIT
+            self.resid_ind_test_config = {"large_sample":False}
 
         
-    def _reset_data(self, data):
+    def _reset_computed_caches(self):
         """
-        Resets learned structures depending on dataset changes
-
-        Currently, resets everything
+        Reset the selected set and all memoized computation caches (tests,
+        residuals, associations, models). Does not reset self.equivalent_variables,
+        which callers reset separately depending on context.
         """
         self.selected_set = None
-        self.equivalent_variables = None
         self.computed_full_tests = dict()
         self.computed_Hk_partial_tests = dict()
         self.computed_resid_tests = dict()
         self.computed_residuals = dict()
         self.computed_associations = dict()
         self.computed_models = dict()
-        
+
+    def _reset_data(self, data):
+        """
+        Resets learned structures depending on dataset changes
+
+        Currently, resets everything. This also re-validates the config,
+        re-derives the implicit defaults (data_format_is_level_1,
+        variable_types, ...) and rebuilds the model/association/partial
+        correlation/resid-independence objects against the new data, since
+        e.g. the column-index level (single vs two levels) may have changed.
+        """
+        self.equivalent_variables = None
+        self._reset_computed_caches()
+
         self.data = data
+
+        self._check_config()
+        self._infer_defaults()
+        self._prebuild_objects(self._model_class_arg, self._model_config_arg,
+                               self._association_class_arg, self._association_config_arg,
+                               self._partial_correlation_class_arg, self._partial_correlation_config_arg)
 
         #!TODO add adaptative change to keep analysis where evidence of no change.
     
@@ -398,41 +448,35 @@ class ChronoEpilogi():
             self.selected_set = None
             self.valid_obs_param_ratio = config["valid_obs_param_ratio"]
         
-        # Parameters that affect objects (LearningModels, Association, PartialCorrelation)
+        # Parameters that affect objects (LearningModels, Association, LagPairsResidCITest)
         if "model_class" in config and config["model_class"] != self.model_class:
-            self.selected_set = None
-            self.computed_full_tests = dict()
-            self.computed_Hk_partial_tests = dict()
-            self.computed_resid_tests = dict()
-            self.computed_residuals = dict()
-            self.computed_associations = dict()
-            self.computed_models = dict()
+            self._reset_computed_caches()
             self.model_class = config["model_class"]
+            self._model_class_arg = config["model_class"]
         if "model_config" in config and len(deepdiff.diff.DeepDiff(config["model_config"], self.model_config))>0:
-            self.selected_set = None
-            self.computed_full_tests = dict()
-            self.computed_Hk_partial_tests = dict()
-            self.computed_resid_tests = dict()
-            self.computed_residuals = dict()
-            self.computed_associations = dict()
-            self.computed_models = dict()
+            self._reset_computed_caches()
             self.model_config = config["model_config"]
+            self._model_config_arg = config["model_config"]
         if "association_class" in config and config["association_class"] != self.association_class:
             self.selected_set = None
             self.computed_associations = dict()
-            self.model_class = config["model_class"]
+            self.association_class = config["association_class"]
+            self._association_class_arg = config["association_class"]
         if "association_config" in config and len(deepdiff.diff.DeepDiff(config["association_config"], self.association_config))>0:
             self.selected_set = None
             self.computed_associations = dict()
             self.association_config = config["association_config"]
+            self._association_config_arg = config["association_config"]
         if "partial_correlation_class" in config and config["partial_correlation_class"] != self.partial_correlation_class:
             self.selected_set = None
             self.computed_Hk_partial_tests = dict()
-            self.model_class = config["partial_correlation_class"]
+            self.partial_correlation_class = config["partial_correlation_class"]
+            self._partial_correlation_class_arg = config["partial_correlation_class"]
         if "partial_correlation_config" in config and len(deepdiff.diff.DeepDiff(config["partial_correlation_config"], self.partial_correlation_config))>0:
             self.selected_set = None
             self.computed_Hk_partial_tests = dict()
-            self.model_config = config["partial_correlation_config"]
+            self.partial_correlation_config = config["partial_correlation_config"]
+            self._partial_correlation_config_arg = config["partial_correlation_config"]
         if "start_with_univariate_autoregressive_model" in config:
             # TODO later because handling the "infer" case is a bit complex.
             # also this parameters is used several time in the code, not just for model building.
@@ -441,26 +485,17 @@ class ChronoEpilogi():
             self.selected_set = None
             self.computed_full_tests = dict()
             self.model_test_method = config["model_test_method"]
-        if "target_type" in config and self.model_class is None:
-            self.selected_set = None
-            self.computed_full_tests = dict()
-            self.computed_Hk_partial_tests = dict()
-            self.computed_resid_tests = dict()
-            self.computed_residuals = dict()
-            self.computed_associations = dict()
-            self.computed_models = dict()
-            self.target_type = config["target_type"]
+        if "target_type" in config and config["target_type"] != self.target_type:
+            # TODO: self.model_class is always resolved to a concrete class after
+            # construction, so there is currently no way to tell whether it was
+            # originally auto-inferred from target_type or explicitly provided.
+            # Updating target_type is disabled until that is tracked properly.
+            raise NotImplementedError
         if "default_k" in config and self.default_k != config["default_k"]:
             self.computed_Hk_partial_tests = dict()
             self.default_k = config["default_k"]
         if "default_max_lag" in config and self.default_max_lag != config["default_max_lag"]:
-            self.selected_set = None
-            self.computed_full_tests = dict()
-            self.computed_Hk_partial_tests = dict()
-            self.computed_resid_tests = dict()
-            self.computed_residuals = dict()
-            self.computed_associations = dict()
-            self.computed_models = dict()
+            self._reset_computed_caches()
             self.default_max_lag = config["default_max_lag"]
         if "variable_types" in config and len(deepdiff.diff.DeepDiff(config["variable_types"], self.variable_types))>0:
             self.selected_set = None
@@ -469,6 +504,7 @@ class ChronoEpilogi():
             self.variable_types = config["variable_types"]
         
         self._check_config()
+        self._infer_defaults()
         self._prebuild_objects(self.model_class, self.model_config, self.association_class,
                                self.association_config, self.partial_correlation_class,
                                self.partial_correlation_config)
@@ -524,7 +560,7 @@ class ChronoEpilogi():
         :param memorize: if set to true, keep model object (potentially of large size) into memory
         """
         if self.model_class is None:
-            raise(RuntimeError("self.model_class is None. This should not happen if the class was correctly initialized."))
+            raise RuntimeError("self.model_class is None. This should not happen if the class was correctly initialized.")
 
         target = self.target if self.data_format_is_level_1 else self.target[0]
         if target not in variables:
@@ -641,8 +677,6 @@ class ChronoEpilogi():
 
         key = self._make_key_residuals(condition_variables)
         residuals = self.computed_residuals[key]
-        key = self._make_key_residuals(condition_variables + [chosen_variable])
-        residuals_full = self.computed_residuals[key]
 
         if self.equivalence_early_stopping:
             pvalues = - self._compute_memorize_associations(condition_variables,residuals,candidate_variables)
@@ -684,19 +718,19 @@ class ChronoEpilogi():
                 chosen_df = self.data[[chosen_variable]]
                 candidate_df = self.data[[candidate]]
                 
-                OLS_object = self.H0_partial_correlation_class(self.H0_partial_correlation_config)
-                
+                test_object = self.resid_ind_test_class(self.resid_ind_test_config)
+
                 key = self._make_key_resid_tests(chosen_variable,candidate,condition_variables)
                 if key not in self.computed_resid_tests:
-                    pvalue = OLS_object.partial_corr(residuals_df, chosen_df, candidate_df)
+                    pvalue = test_object.ci_test(residuals_df, chosen_df, candidate_df)
                     self.computed_resid_tests[key] = pvalue
                 pvalue = self.computed_resid_tests[key]
-                
+
                 if pvalue > equivalence_threshold:  # no relation found between chosen and residuals given candidate
-                
+
                     key = self._make_key_resid_tests(candidate,chosen_variable,condition_variables)
                     if key not in self.computed_resid_tests:
-                        pvalue = OLS_object.partial_corr(residuals_df, candidate_df,  chosen_df)
+                        pvalue = test_object.ci_test(residuals_df, candidate_df,  chosen_df)
                         self.computed_resid_tests[key] = pvalue
                     pvalue = self.computed_resid_tests[key]
                     
@@ -809,7 +843,7 @@ class ChronoEpilogi():
         While there is such a change, keep on conducting backward tests.
         """
         if self.selected_set is None:
-            raise(RuntimeError("Backward phase entered but self.selected_set is None. Have you made sure to launch the forward phase?"))
+            raise RuntimeError("Backward phase entered but self.selected_set is None. Have you made sure to launch the forward phase?")
 
         selected_set_has_changed = True
         while selected_set_has_changed:
@@ -852,7 +886,7 @@ class ChronoEpilogi():
     
     def _equivalent_search(self):
         if self.selected_set is None:
-            raise(RuntimeError("Equivalence phase entered but self.selected_set is None. Have you made sure to launch the forward phase?"))
+            raise RuntimeError("Equivalence phase entered but self.selected_set is None. Have you made sure to launch the forward phase?")
 
         # build candidate set
         candidate_variables = set(self.data.columns.get_level_values(0).unique())
@@ -870,7 +904,7 @@ class ChronoEpilogi():
         for index in range(len(self.selected_set)+1):
             # create the conditioning set model
             if "G" in self.phases:
-                 condition_variables = self.selected_set[:index]
+                condition_variables = self.selected_set[:index]
             elif "E" in self.phases:
                 condition_variables = self.selected_set[:index]+(self.selected_set[index+1:] if index<len(self.selected_set) else [])
 
@@ -896,10 +930,7 @@ class ChronoEpilogi():
             chosen_variable = self.selected_set[index]
 
             # compute equivalent set
-            if "G" in self.phases:
-                self.equivalent_variables[chosen_variable] = self._equivalent_test(chosen_variable, list(candidate_variables),
-                                                                              condition_variables)
-            elif "E" in self.phases:
+            if "G" in self.phases or "E" in self.phases:
                 self.equivalent_variables[chosen_variable] = self._equivalent_test(chosen_variable, list(candidate_variables),
                                                                               condition_variables)
             # remove equivalent variables
@@ -920,9 +951,9 @@ class ChronoEpilogi():
         """
         threshold = self.backward_test_threshold
         if self.selected_set is None:
-            raise(RuntimeError("Verification phase entered but self.selected_set is None. Have you made sure to launch the forward phase?"))
+            raise RuntimeError("Verification phase entered but self.selected_set is None. Have you made sure to launch the forward phase?")
         if self.equivalent_variables is None:
-            raise(RuntimeError("Verification phase entered but self.equivalent_variables is None. Have you made sure to launch the equivalence phase?"))
+            raise RuntimeError("Verification phase entered but self.equivalent_variables is None. Have you made sure to launch the equivalence phase?")
         
         for key in self.equivalent_variables:
         
@@ -1017,7 +1048,7 @@ class ChronoEpilogi():
         if "V" in self.phases:
             self._verify_equivalence_relevance()
     
-    def get_first_markov_boundary(self)->List[str]:
+    def get_first_markov_boundary(self)->list[str]:
         """
         Returns the Markov Boundary computed during the forward-backward phases.
 
@@ -1037,8 +1068,8 @@ class ChronoEpilogi():
         ['0', '1', '2']
         """
         if self.selected_set is None:
-            raise(RuntimeError("self.selected_set is None. Run the fit method to compute a first Markov Boundary."))
-        return self.selected_set
+            raise RuntimeError("self.selected_set is None. Run the fit method to compute a first Markov Boundary.")
+        return list(self.selected_set)
         
     def get_total_number_markov_boundaries(self)->int:
         """
@@ -1066,14 +1097,14 @@ class ChronoEpilogi():
         2
         """
         if self.equivalent_variables is None:
-            raise(RuntimeError("self.equivalent_variables is None. Have you made sure to launch the equivalence phase?"))
+            raise RuntimeError("self.equivalent_variables is None. Have you made sure to launch the equivalence phase?")
         
         total = 1
         for key in self.equivalent_variables:
             total*=len(self.equivalent_variables[key])
         return total
         
-    def get_markov_boundary_from_index(self,index:int)->List[str]:
+    def get_markov_boundary_from_index(self,index:int)->list[str]:
         """
         Returns the Markov Boundary corresponding to the provided index.
 
@@ -1101,7 +1132,7 @@ class ChronoEpilogi():
         (['0', '2', '1'], ['0', '2', '3'])
         """
         if self.equivalent_variables is None:
-            raise(RuntimeError("self.equivalent_variables is None. Have you made sure to launch the equivalence phase?"))
+            raise RuntimeError("self.equivalent_variables is None. Have you made sure to launch the equivalence phase?")
         
         total_number = self.get_total_number_markov_boundaries()
         n = index%total_number
@@ -1114,13 +1145,13 @@ class ChronoEpilogi():
             n = n % denom
         return selected
     
-    def get_equivalence_classes(self)->List[List[str]]:
+    def get_equivalence_classes(self)->list[list[str]]:
         """
         Returns the list of equivalence classes.
-        
+
         Returns
         -------
-        eq_classes: List[List[str]]
+        eq_classes: list[list[str]]
             The equivalence classes, each a list of TS names (one level column data) or group names (two levels column data).
         
         Examples
@@ -1135,13 +1166,12 @@ class ChronoEpilogi():
         [['0'], ['2'], ['1', '3']]
         """
         if self.equivalent_variables is None:
-            raise(RuntimeError("self.equivalent_variables is None. Have you made sure to launch the equivalence phase?"))
+            raise RuntimeError("self.equivalent_variables is None. Have you made sure to launch the equivalence phase?")
 
-        eq_classes = list(self.equivalent_variables.values())
+        eq_classes = [list(candidates) for candidates in self.equivalent_variables.values()]
         return eq_classes
 
 """
 !TODO: timeout and verbosity settings for the fit
-!TODO: fix config reset protocol, currently lacking autoregressive setting reset.
 !TODO: refactor: simpler functions, better names, unclutter residual and partial correlation saving.
 """
