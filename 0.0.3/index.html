@@ -641,11 +641,19 @@ multivariate time series.</p>
 </ul>
 <p><strong>Interpretability with Multiple Markov Boundaries</strong></p>
 <p>ChronoEpilogi provides interpretability by design. By identifying multiple Markov Boundaries, ChronoEpilogi reveals not just a single set of relevant time series, but all minimal sets that explain the target. This approach uncovers alternative explanations and highlights redundancies or synergies among Time Series, giving practitioners a deeper understanding of the underlying temporal relationships. The algorithm’s output is easy to inspect, making it straightforward to interpret which variables are essential, which are interchangeable, and how different combinations can drive predictions or insights.</p>
+<p>Extensive empirical evaluation is conducted in the following paper: <a href="https://hal.science/hal-05734204">Prepublication, Etienne Vareille, Ioannis Tsamardinos, Michele Linardi, Vassilis Christophides (2026). Causal Variable Selection in Multivariate Time Series: A Scalable and General Algorithm with Multiple Solutions</a></p>
 <h2 id="installation">Installation</h2>
 <p>You can install ChronoEpilogi with pip. We recommend using a virtual environment.</p>
 <p><code>pip install git+https://github.com/ev07/minimal_chronoepilogi.git</code></p>
 <h2 id="quick-start">Quick Start</h2>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">((</span><span class="mi">1000</span><span class="p">,</span><span class="mi">10</span><span class="p">)),</span><span class="n">columns</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span><span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">))))</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">target</span> <span class="o">=</span> <span class="s2">&quot;0&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">fs_instance</span> <span class="o">=</span> <span class="n">ChronoEpilogi</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">fs_instance</span><span class="o">.</span><span class="n">get_first_markov_boundary</span><span class="p">()</span>
+</span></code></pre></div>
 <h2 id="credits">Credits</h2>
+<p>Developer and maintainer: Etienne Vareille</p>
 
 
 
