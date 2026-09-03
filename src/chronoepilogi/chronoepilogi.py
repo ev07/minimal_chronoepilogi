@@ -208,13 +208,14 @@ class ChronoEpilogi():
         # gets resolved from "infer" to a concrete True/False below, so this is
         # needed to re-resolve it correctly if the data shape changes later.
         self._start_with_univariate_autoregressive_model_arg = start_with_univariate_autoregressive_model
+        # same reasoning: self.model_test_method/self.variable_types get resolved
+        # to concrete, never-None values below.
+        self._model_test_method_arg = model_test_method
+        self._variable_types_arg = variable_types
 
         self._check_config()
         self._infer_defaults()
-
-        self._prebuild_objects(model_class, model_config,
-                               association_class, association_config,
-                               partial_correlation_class, partial_correlation_config)
+        self._prebuild_objects()
 
         # storing runs
         self.equivalent_variables = None
@@ -247,6 +248,17 @@ class ChronoEpilogi():
                 )
         if self.backward_removal_strategy not in ["first","max"]:
             raise ValueError("Argument backward_removal_strategy expects either 'first' or 'max'.")
+        if (self._model_class_arg is None) != (self._model_config_arg is None):
+            raise ValueError("model_class and model_config must be given together, or both left as None.")
+        if (self._model_class_arg is not None) and (self._model_test_method_arg is None):
+            raise ValueError(
+                "model_test_method must be given explicitly when model_class is explicitly given; "
+                "the built-in default ('lr-test') is only inferred for the auto-selected model classes."
+            )
+        if (self._association_class_arg is None) != (self._association_config_arg is None):
+            raise ValueError("association_class and association_config must be given together, or both left as None.")
+        if (self._partial_correlation_class_arg is None) != (self._partial_correlation_config_arg is None):
+            raise ValueError("partial_correlation_class and partial_correlation_config must be given together, or both left as None.")
 
     def _infer_defaults(self):
         """
@@ -271,27 +283,26 @@ class ChronoEpilogi():
             self.start_with_univariate_autoregressive_model = self._start_with_univariate_autoregressive_model_arg
 
         # check if the model test is set. If model_class is also None, set to "lr-test".
-        if self.model_test_method is None:
-            if self.model_class is None:
-                self.model_test_method = "lr-test"
+        if self._model_test_method_arg is not None:
+            self.model_test_method = self._model_test_method_arg
+        elif self._model_class_arg is None:
+            self.model_test_method = "lr-test"
+        else:
+            self.model_test_method = None
 
         # in the case of either association_class or partial_correlation_class being None
         # (i.e. auto-inferred rather than explicitly provided by the caller),
         # we must create or complete a variable_types dictionary
         # variables of unknown types will be considered numerical
         if (self._association_class_arg is None) or (self._partial_correlation_class_arg is None):
-            if self.variable_types is None:
+            if self._variable_types_arg is None:
                 self.variable_types = defaultdict(lambda:"numerical")
             else:
-                for variable in self.data.columns:  # compatible with MultiLevel.
-                    if variable not in self.variable_types:
-                        self.variable_types[variable] = "numerical"
+                self.variable_types = self._variable_types_arg
 
 
-    def _prebuild_objects(self, model_class, model_config,
-                          association_class, association_config,
-                          partial_correlation_class, partial_correlation_config):
-        if model_class is None:
+    def _prebuild_objects(self):
+        if self._model_class_arg is None:
             # if 1level, autoregressive, continuous: take ARDLModel
             # if 1level, autoregressive, count: take TemporalAdaptation with PoissonCrossSectional
             # if 1level, autoregressive, binary: take TemporalAdaptation with LogitCrossSectional
@@ -337,10 +348,10 @@ class ChronoEpilogi():
                     self.model_class = LogitCrossSectional
                     self.model_config = base_config
         else:
-            self.model_class = model_class
-            self.model_config = model_config
-        
-        if association_class is None:
+            self.model_class = self._model_class_arg
+            self.model_config = self._model_config_arg
+
+        if self._association_class_arg is None:
             # if 1level column, TemporalSlowAssociation
             # if 2level column, CrossSectionalAssociation
             if self.data_format_is_level_1:
@@ -351,11 +362,11 @@ class ChronoEpilogi():
                 self.association_class = CrossSectionalAssociation
                 self.association_config = {"categorical_method":"f_oneway","variable_types":self.variable_types}
         else:
-            self.association_class = association_class
-            self.association_config = association_config
+            self.association_class = self._association_class_arg
+            self.association_config = self._association_config_arg
         self.association_object = self.association_class(self.association_config)
 
-        if partial_correlation_class is None:
+        if self._partial_correlation_class_arg is None:
             # if 1level column, TemporalSlowHk
             # if 2level column, CrossSectionalHk
             if self.data_format_is_level_1:
@@ -367,8 +378,8 @@ class ChronoEpilogi():
                 self.partial_correlation_config = {"categorical_method":"f_oneway",
                                            "variable_types":self.variable_types,"k":self.default_k}
         else:
-            self.partial_correlation_class = partial_correlation_class
-            self.partial_correlation_config = partial_correlation_config
+            self.partial_correlation_class = self._partial_correlation_class_arg
+            self.partial_correlation_config = self._partial_correlation_config_arg
         self.partial_correlation_object = self.partial_correlation_class(self.partial_correlation_config)
         
         # choose H0 object
@@ -398,11 +409,7 @@ class ChronoEpilogi():
         """
         Resets learned structures depending on dataset changes
 
-        Currently, resets everything. This also re-validates the config,
-        re-derives the implicit defaults (data_format_is_level_1,
-        variable_types, ...) and rebuilds the model/association/partial
-        correlation/resid-independence objects against the new data, since
-        e.g. the column-index level (single vs two levels) may have changed.
+        Currently, resets all computed objects. User-provided parameters are not reset.
         """
         self.equivalent_variables = None
         self._reset_computed_caches()
@@ -411,14 +418,12 @@ class ChronoEpilogi():
 
         self._check_config()
         self._infer_defaults()
-        self._prebuild_objects(self._model_class_arg, self._model_config_arg,
-                               self._association_class_arg, self._association_config_arg,
-                               self._partial_correlation_class_arg, self._partial_correlation_config_arg)
+        self._prebuild_objects()
 
         #!TODO add adaptative change to keep analysis where evidence of no change.
     
     def _reset_config(self, config):
-        # !TODO: complete the parameter update for start_with_univariate_autoregressive_model.
+        # !TODO: complete the parameter update for start_with_univariate_autoregressive_model and target_type
         self.equivalent_variables = None
 
         # Note that equivalent threshold, correlation threshold, as well as early stopping and equivalence heuristic only need
@@ -449,42 +454,37 @@ class ChronoEpilogi():
             self.valid_obs_param_ratio = config["valid_obs_param_ratio"]
         
         # Parameters that affect objects (LearningModels, Association, LagPairsResidCITest)
-        if "model_class" in config and config["model_class"] != self.model_class:
+        if "model_class" in config and config["model_class"] != self._model_class_arg:
             self._reset_computed_caches()
             self.model_class = config["model_class"]
             self._model_class_arg = config["model_class"]
-        if "model_config" in config and len(deepdiff.diff.DeepDiff(config["model_config"], self.model_config))>0:
+        if "model_config" in config and len(deepdiff.diff.DeepDiff(config["model_config"], self._model_config_arg))>0:
             self._reset_computed_caches()
-            self.model_config = config["model_config"]
             self._model_config_arg = config["model_config"]
-        if "association_class" in config and config["association_class"] != self.association_class:
+        if "association_class" in config and config["association_class"] != self._association_class_arg:
             self.selected_set = None
             self.computed_associations = dict()
-            self.association_class = config["association_class"]
             self._association_class_arg = config["association_class"]
-        if "association_config" in config and len(deepdiff.diff.DeepDiff(config["association_config"], self.association_config))>0:
+        if "association_config" in config and len(deepdiff.diff.DeepDiff(config["association_config"], self._association_config_arg))>0:
             self.selected_set = None
             self.computed_associations = dict()
-            self.association_config = config["association_config"]
             self._association_config_arg = config["association_config"]
-        if "partial_correlation_class" in config and config["partial_correlation_class"] != self.partial_correlation_class:
+        if "partial_correlation_class" in config and config["partial_correlation_class"] != self._partial_correlation_class_arg:
             self.selected_set = None
             self.computed_Hk_partial_tests = dict()
-            self.partial_correlation_class = config["partial_correlation_class"]
             self._partial_correlation_class_arg = config["partial_correlation_class"]
-        if "partial_correlation_config" in config and len(deepdiff.diff.DeepDiff(config["partial_correlation_config"], self.partial_correlation_config))>0:
+        if "partial_correlation_config" in config and len(deepdiff.diff.DeepDiff(config["partial_correlation_config"], self._partial_correlation_config_arg))>0:
             self.selected_set = None
             self.computed_Hk_partial_tests = dict()
-            self.partial_correlation_config = config["partial_correlation_config"]
             self._partial_correlation_config_arg = config["partial_correlation_config"]
         if "start_with_univariate_autoregressive_model" in config:
             # TODO later because handling the "infer" case is a bit complex.
             # also this parameters is used several time in the code, not just for model building.
             raise NotImplementedError
-        if "model_test_method" in config and config["model_test_method"] != self.model_test_method:
+        if "model_test_method" in config and config["model_test_method"] != self._model_test_method_arg:
             self.selected_set = None
             self.computed_full_tests = dict()
-            self.model_test_method = config["model_test_method"]
+            self._model_test_method_arg = config["model_test_method"]
         if "target_type" in config and config["target_type"] != self.target_type:
             # TODO: self.model_class is always resolved to a concrete class after
             # construction, so there is currently no way to tell whether it was
@@ -497,17 +497,15 @@ class ChronoEpilogi():
         if "default_max_lag" in config and self.default_max_lag != config["default_max_lag"]:
             self._reset_computed_caches()
             self.default_max_lag = config["default_max_lag"]
-        if "variable_types" in config and len(deepdiff.diff.DeepDiff(config["variable_types"], self.variable_types))>0:
+        if "variable_types" in config and len(deepdiff.diff.DeepDiff(config["variable_types"], self._variable_types_arg))>0:
             self.selected_set = None
             self.computed_Hk_partial_tests = dict()
             self.computed_associations = dict()
-            self.variable_types = config["variable_types"]
+            self._variable_types_arg = config["variable_types"]
         
         self._check_config()
         self._infer_defaults()
-        self._prebuild_objects(self.model_class, self.model_config, self.association_class,
-                               self.association_config, self.partial_correlation_class,
-                               self.partial_correlation_config)
+        self._prebuild_objects()
     
     def _make_key_full_tests(self,tested,full):
         """
